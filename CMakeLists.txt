@@ -12,6 +12,7 @@ include_directories("${CMAKE_SOURCE_DIR}/source/lgdb")
 
 add_library(lgdb STATIC "${LGDB_SOURCES}")
 target_compile_definitions(lgdb PUBLIC PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
+target_link_libraries(lgdb PUBLIC "dbghelp.lib")
 
 add_executable(lgdbcli "${CLI_SOURCES}")
 target_link_libraries(lgdbcli PUBLIC "lgdb")

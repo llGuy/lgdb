@@ -9,93 +9,93 @@
 #include <psapi.h>
 
 /* This function isn't my code */
-const char *GetFileNameFromHandle(HANDLE hFile) 
+const char *GetFileNameFromHandle(HANDLE hFile)
 {
 #define BUFSIZE 512
 
-	BOOL bSuccess = FALSE;
-	char pszFilename[MAX_PATH+1];
-	HANDLE hFileMap;
+    BOOL bSuccess = FALSE;
+    char pszFilename[MAX_PATH + 1];
+    HANDLE hFileMap;
 
-	const char *strFilename = malloc(sizeof(char) * BUFSIZE);
+    const char *strFilename = malloc(sizeof(char) * BUFSIZE);
 
-	// Get the file size.
-	DWORD dwFileSizeHi = 0;
-	DWORD dwFileSizeLo = GetFileSize(hFile, &dwFileSizeHi); 
+    // Get the file size.
+    DWORD dwFileSizeHi = 0;
+    DWORD dwFileSizeLo = GetFileSize(hFile, &dwFileSizeHi);
 
-	if( dwFileSizeLo == 0 && dwFileSizeHi == 0 )
-	{     
-		return FALSE;
-	}
+    if (dwFileSizeLo == 0 && dwFileSizeHi == 0)
+    {
+        return FALSE;
+    }
 
-	// Create a file mapping object.
-	hFileMap = CreateFileMapping(hFile, 
-		NULL, 
-		PAGE_READONLY,
-		0, 
-		1,
-		NULL);
+    // Create a file mapping object.
+    hFileMap = CreateFileMapping(hFile,
+        NULL,
+        PAGE_READONLY,
+        0,
+        1,
+        NULL);
 
-	if (hFileMap) 
-	{
-		// Create a file mapping to get the file name.
-		void* pMem = MapViewOfFile(hFileMap, FILE_MAP_READ, 0, 0, 1);
+    if (hFileMap)
+    {
+        // Create a file mapping to get the file name.
+        void *pMem = MapViewOfFile(hFileMap, FILE_MAP_READ, 0, 0, 1);
 
-		if (pMem) 
-		{
-			if (GetMappedFileNameA (GetCurrentProcess(), 
-				pMem, 
-				pszFilename,
-				MAX_PATH)) 
-			{
+        if (pMem)
+        {
+            if (GetMappedFileNameA(GetCurrentProcess(),
+                pMem,
+                pszFilename,
+                MAX_PATH))
+            {
 
-				// Translate path with device name to drive letters.
-				char szTemp[BUFSIZE];
-				szTemp[0] = '\0';
+                // Translate path with device name to drive letters.
+                char szTemp[BUFSIZE];
+                szTemp[0] = '\0';
 
-				if (GetLogicalDriveStringsA(BUFSIZE-1, szTemp)) 
-				{
-					char szName[MAX_PATH];
-					char szDrive[3] = " :";
-					BOOL bFound = FALSE;
-					char* p = szTemp;
+                if (GetLogicalDriveStringsA(BUFSIZE - 1, szTemp))
+                {
+                    char szName[MAX_PATH];
+                    char szDrive[3] = " :";
+                    BOOL bFound = FALSE;
+                    char *p = szTemp;
 
-					do 
-					{
-						// Copy the drive letter to the template string
-						*szDrive = *p;
+                    do
+                    {
+                        // Copy the drive letter to the template string
+                        *szDrive = *p;
 
-						// Look up each device name
-						if (QueryDosDeviceA(szDrive, szName, MAX_PATH))
-						{
-							size_t uNameLen = _tcslen(szName);
+                        // Look up each device name
+                        if (QueryDosDeviceA(szDrive, szName, MAX_PATH))
+                        {
+                            size_t uNameLen = _tcslen(szName);
 
-							if (uNameLen < MAX_PATH) 
-							{
-								bFound = _tcsnicmp(pszFilename, szName, 
-									uNameLen) == 0;
+                            if (uNameLen < MAX_PATH)
+                            {
+                                bFound = _tcsnicmp(pszFilename, szName,
+                                    uNameLen) == 0;
 
-								if (bFound) 
-								{
-                                    sprintf(strFilename, "%s%s", szDrive, pszFilename+uNameLen);
-								}
-							}
-						}
+                                if (bFound)
+                                {
+                                    sprintf(strFilename, "%s%s", szDrive, pszFilename + uNameLen);
+                                }
+                            }
+                        }
 
-						// Go to the next NULL character.
-						while (*p++);
-					} while (!bFound && *p); // end of string
-				}
-			}
-			bSuccess = TRUE;
-			UnmapViewOfFile(pMem);
-		} 
+                        // Go to the next NULL character.
+                        while (*p++);
+                    } while (!bFound && *p); // end of string
+                }
+            }
+            bSuccess = TRUE;
+            UnmapViewOfFile(pMem);
+        }
 
-		CloseHandle(hFileMap);
+        CloseHandle(hFileMap);
 
-	}
+    }
 
-	return(strFilename);
+    return(strFilename);
 }
 
 typedef struct {
@@ -113,7 +113,7 @@ typedef struct {
 static void s_print_win32_error(const char *win32_function) {
     unsigned int last_error = GetLastError();
     printf("Call to \"%s\" failed with error %zu: ", win32_function, last_error);
-    char buf[256] = {0};
+    char buf[256] = { 0 };
     FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
         NULL, last_error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
         buf, (sizeof(buf) / sizeof(char)), NULL);
@@ -192,11 +192,7 @@ static void s_process_exception_code(const LPDEBUG_EVENT debug_ev, lgdb_process_
             proc_ctx->proc_info.hThread,
             &ctx);
 
-        IMAGEHLP_LINE64 line;
-        line.SizeOfStruct = sizeof(line);
-        DWORD displacement;
-
-        STACKFRAME64 stack = { 
+        STACKFRAME64 stack = {
             .AddrPC.Offset = ctx.Rip,
             .AddrPC.Mode = AddrModeFlat,
             .AddrFrame.Offset = ctx.Rbp,
@@ -208,9 +204,8 @@ static void s_process_exception_code(const LPDEBUG_EVENT debug_ev, lgdb_process_
         HANDLE compare = debug_ev->dwProcessId;
 
         do {
-            WIN32_CALL(StackWalk64,
-                // Make sure to use IMAGE_FILE_MACHINE_I386 for x86 processes!
-                IMAGE_FILE_MACHINE_IA64,
+            success = WIN32_CALL(StackWalk64,
+                IMAGE_FILE_MACHINE_AMD64,
                 proc_ctx->proc_info.hProcess,
                 proc_ctx->proc_info.hThread,
                 &stack,
@@ -228,7 +223,7 @@ static void s_process_exception_code(const LPDEBUG_EVENT debug_ev, lgdb_process_
                 &module);
 
             // Read information in the stack structure and map to symbol file
-            DWORD displacement;
+            DWORD64 displacement;
             IMAGEHLP_SYMBOL64 *symbol = (IMAGEHLP_SYMBOL64 *)malloc(sizeof(IMAGEHLP_SYMBOL64) + MAX_SYM_NAME);
 
             memset(symbol, 0, sizeof(IMAGEHLP_SYMBOL64) + MAX_SYM_NAME);
@@ -241,6 +236,8 @@ static void s_process_exception_code(const LPDEBUG_EVENT debug_ev, lgdb_process_
                 stack.AddrPC.Offset,
                 &displacement,
                 symbol);
+
+            printf("%s\n", symbol->Name);
 
         } while (stack.AddrReturn.Offset != 0);
     } break;
@@ -302,14 +299,12 @@ static void s_debug_loop(lgdb_process_ctx_t *proc_ctx) {
             case CREATE_PROCESS_DEBUG_EVENT: {
                 WIN32_CALL(SymInitialize, proc_ctx->proc_info.hProcess, NULL, FALSE);
 
-                proc_ctx->process_pdb_base = SymLoadModuleEx(
+                proc_ctx->process_pdb_base = SymLoadModule64(
                     proc_ctx->proc_info.hProcess,
                     debug_ev.u.CreateProcessInfo.hFile,
                     proc_ctx->exe_path,
                     0,
                     debug_ev.u.CreateProcessInfo.lpBaseOfImage,
-                    0,
-                    NULL,
                     0);
 
                 // success = WIN32_CALL(SymEnumSymbols, proc_ctx->proc_info.hProcess, proc_ctx->process_pdb_base, "", s_sym_enum_proc, NULL);

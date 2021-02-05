@@ -1,5 +1,7 @@
 #include <stdio.h>
 
+#include <Windows.h>
+#include <DbgHelp.h>
 #include <l_state.h>
 
 int main() {

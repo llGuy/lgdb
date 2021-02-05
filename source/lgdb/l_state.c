@@ -1,3 +1,5 @@
+#define _CRT_SECURE_NO_WARNINGS
+
 // MapViewOfFile
 #include <stdio.h>
 #include "l_state.h"
@@ -12,7 +14,7 @@ const char *GetFileNameFromHandle(HANDLE hFile)
 #define BUFSIZE 512
 
 	BOOL bSuccess = FALSE;
-	TCHAR pszFilename[MAX_PATH+1];
+	char pszFilename[MAX_PATH+1];
 	HANDLE hFileMap;
 
 	const char *strFilename = malloc(sizeof(char) * BUFSIZE);
@@ -41,22 +43,22 @@ const char *GetFileNameFromHandle(HANDLE hFile)
 
 		if (pMem) 
 		{
-			if (GetMappedFileName (GetCurrentProcess(), 
+			if (GetMappedFileNameA (GetCurrentProcess(), 
 				pMem, 
 				pszFilename,
 				MAX_PATH)) 
 			{
 
 				// Translate path with device name to drive letters.
-				TCHAR szTemp[BUFSIZE];
+				char szTemp[BUFSIZE];
 				szTemp[0] = '\0';
 
-				if (GetLogicalDriveStrings(BUFSIZE-1, szTemp)) 
+				if (GetLogicalDriveStringsA(BUFSIZE-1, szTemp)) 
 				{
-					TCHAR szName[MAX_PATH];
-					TCHAR szDrive[3] = TEXT(" :");
+					char szName[MAX_PATH];
+					char szDrive[3] = " :";
 					BOOL bFound = FALSE;
-					TCHAR* p = szTemp;
+					char* p = szTemp;
 
 					do 
 					{
@@ -64,7 +66,7 @@ const char *GetFileNameFromHandle(HANDLE hFile)
 						*szDrive = *p;
 
 						// Look up each device name
-						if (QueryDosDevice(szDrive, szName, MAX_PATH))
+						if (QueryDosDeviceA(szDrive, szName, MAX_PATH))
 						{
 							size_t uNameLen = _tcslen(szName);
 
@@ -90,10 +92,49 @@ const char *GetFileNameFromHandle(HANDLE hFile)
 		} 
 
 		CloseHandle(hFileMap);
+
 	}
 
 	return(strFilename);
 }
+
+typedef struct {
+
+    /* Process handle, main thread, etc... */
+    PROCESS_INFORMATION proc_info;
+    /* For now, just store here whilst we are still experimenting */
+    DWORD64 process_pdb_base;
+    IMAGEHLP_MODULE64 module_info;
+
+    const char *exe_path;
+
+} lgdb_process_ctx_t;
+
+static void s_print_win32_error(const char *win32_function) {
+    unsigned int last_error = GetLastError();
+    printf("Call to \"%s\" failed with error %zu: ", win32_function, last_error);
+    char buf[256] = {0};
+    FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL, last_error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        buf, (sizeof(buf) / sizeof(char)), NULL);
+    printf(buf);
+}
+
+static inline BOOL s_check_win32_call(BOOL result, const char *func) {
+    if (!result) {
+        s_print_win32_error(func);
+    }
+
+    return result;
+}
+
+#define WIN32_CALL(func, ...) \
+    s_check_win32_call(func(__VA_ARGS__), #func)
+
+#if 0
+#define WIN32_CALL(func, ...) \
+    if (!(func(__VA_ARGS__))) s_print_win32_error(#func)
+#endif
 
 const char *concat_str(const char *a, const char *b) {
     size_t len_a = strlen(a), len_b = strlen(b);
@@ -108,7 +149,12 @@ const char *concat_str(const char *a, const char *b) {
     return concat;
 }
 
-static BOOL s_read_proc(HANDLE process, DWORD64 base_addr, PVOID buffer, DWORD size, LPDWORD number_of_bytes_read) {
+static BOOL s_read_proc(
+    HANDLE process,
+    DWORD64 base_addr,
+    PVOID buffer,
+    DWORD size,
+    LPDWORD number_of_bytes_read) {
     SIZE_T s;
     BOOL success = ReadProcessMemory(process, (LPVOID)base_addr, buffer, size, &s);
     *number_of_bytes_read = s;
@@ -116,13 +162,7 @@ static BOOL s_read_proc(HANDLE process, DWORD64 base_addr, PVOID buffer, DWORD s
     return success;
 }
 
-
-/* For now, just store here whilst we are still experimenting */
-static DWORD64 process_pdb_base;
-static IMAGEHLP_MODULE64 module_info;
-
-
-static void s_process_exception_code(const LPDEBUG_EVENT debug_ev, HANDLE process, HANDLE thread_id) {
+static void s_process_exception_code(const LPDEBUG_EVENT debug_ev, lgdb_process_ctx_t *proc_ctx) {
     /*
         Process the exception code. When handling exceptions,
         remember to set the continuation status parameter
@@ -147,24 +187,14 @@ static void s_process_exception_code(const LPDEBUG_EVENT debug_ev, HANDLE proces
             .ContextFlags = CONTEXT_FULL
         };
 
-        BOOL success = GetThreadContext(thread_id, &ctx);
-
-        if (!success) {
-            wchar_t buf[256];
-            FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                buf, (sizeof(buf) / sizeof(wchar_t)), NULL);
-            wprintf(buf);
-        }
+        BOOL success = WIN32_CALL(
+            GetThreadContext,
+            proc_ctx->proc_info.hThread,
+            &ctx);
 
         IMAGEHLP_LINE64 line;
         line.SizeOfStruct = sizeof(line);
         DWORD displacement;
-        success = SymGetLineFromAddr64(process, (DWORD)ctx.Rip, &displacement, &line);
-
-        if (success) {
-            printf("Line %d\n", line.LineNumber);
-        }
 
         STACKFRAME64 stack = { 
             .AddrPC.Offset = ctx.Rip,
@@ -178,29 +208,24 @@ static void s_process_exception_code(const LPDEBUG_EVENT debug_ev, HANDLE proces
         HANDLE compare = debug_ev->dwProcessId;
 
         do {
-            success = StackWalk64(
-                IMAGE_FILE_MACHINE_I386,
-                process,
-                thread_id,
+            WIN32_CALL(StackWalk64,
+                // Make sure to use IMAGE_FILE_MACHINE_I386 for x86 processes!
+                IMAGE_FILE_MACHINE_IA64,
+                proc_ctx->proc_info.hProcess,
+                proc_ctx->proc_info.hThread,
                 &stack,
                 &ctx,
                 s_read_proc,
                 SymFunctionTableAccess64,
                 SymGetModuleBase64, 0);
 
-            // stack.AddrPC.Offset = ctx.Rip;
-
             IMAGEHLP_MODULE64 module = { 0 };
             module.SizeOfStruct = sizeof(module);
-            success = SymGetModuleInfo64(process, (DWORD64)stack.AddrPC.Offset, &module);
-
-            if (!success) {
-                wchar_t buf[256];
-                FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                    NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                    buf, (sizeof(buf) / sizeof(wchar_t)), NULL);
-                wprintf(buf);
-            }
+            WIN32_CALL(
+                SymGetModuleInfo64,
+                proc_ctx->proc_info.hProcess,
+                (DWORD64)stack.AddrPC.Offset,
+                &module);
 
             // Read information in the stack structure and map to symbol file
             DWORD displacement;
@@ -210,15 +235,13 @@ static void s_process_exception_code(const LPDEBUG_EVENT debug_ev, HANDLE proces
             symbol->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
             symbol->MaxNameLength = MAX_SYM_NAME;
 
-            success = SymGetSymFromAddr64(process, stack.AddrPC.Offset, &displacement, symbol);
+            WIN32_CALL(
+                SymGetSymFromAddr64,
+                proc_ctx->proc_info.hProcess,
+                stack.AddrPC.Offset,
+                &displacement,
+                symbol);
 
-            if (!success) {
-                wchar_t buf[256];
-                FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                    NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                    buf, (sizeof(buf) / sizeof(wchar_t)), NULL);
-                wprintf(buf);
-            }
         } while (stack.AddrReturn.Offset != 0);
     } break;
 
@@ -250,7 +273,15 @@ static void s_process_exception_code(const LPDEBUG_EVENT debug_ev, HANDLE proces
     }
 }
 
-static void s_debug_loop(HANDLE process, HANDLE thread_id, const char *exe_name) {
+static BOOL s_sym_enum_proc(
+    PSYMBOL_INFO sym_info,
+    ULONG size,
+    PVOID user_ctx) {
+    printf("Got symbol: %s\n", sym_info->Name);
+    return 1;
+}
+
+static void s_debug_loop(lgdb_process_ctx_t *proc_ctx) {
     DWORD continue_status = DBG_CONTINUE;
     DEBUG_EVENT debug_ev;
 
@@ -265,49 +296,37 @@ static void s_debug_loop(HANDLE process, HANDLE thread_id, const char *exe_name)
             switch (debug_ev.dwDebugEventCode) {
 
             case EXCEPTION_DEBUG_EVENT: {
-                s_process_exception_code(&debug_ev, process, thread_id);
+                s_process_exception_code(&debug_ev, proc_ctx);
             } break;
 
             case CREATE_PROCESS_DEBUG_EVENT: {
-                process_pdb_base = SymLoadModule64(
-                    process,
+                WIN32_CALL(SymInitialize, proc_ctx->proc_info.hProcess, NULL, FALSE);
+
+                proc_ctx->process_pdb_base = SymLoadModuleEx(
+                    proc_ctx->proc_info.hProcess,
                     debug_ev.u.CreateProcessInfo.hFile,
-                    exe_name,
+                    proc_ctx->exe_path,
                     0,
                     debug_ev.u.CreateProcessInfo.lpBaseOfImage,
+                    0,
+                    NULL,
                     0);
 
-                // Determine if the symbols are available
-                module_info.SizeOfStruct = sizeof(module_info);
-                BOOL success = SymGetModuleInfo64(
-                    process,
-                    process_pdb_base,
-                    &module_info);
+                // success = WIN32_CALL(SymEnumSymbols, proc_ctx->proc_info.hProcess, proc_ctx->process_pdb_base, "", s_sym_enum_proc, NULL);
 
-                if (success && module_info.SymType == SymPdb) {
+                // Determine if the symbols are available
+                proc_ctx->module_info.SizeOfStruct = sizeof(proc_ctx->module_info);
+                success = WIN32_CALL(SymGetModuleInfo64,
+                    proc_ctx->proc_info.hProcess,
+                    proc_ctx->process_pdb_base,
+                    &proc_ctx->module_info);
+
+                if (success && proc_ctx->module_info.SymType == SymPdb) {
                     printf("Symbols were properly loaded\n");
                 }
                 else {
                     printf("Symbols were not properly loaded\n");
-
-                    wchar_t buf[256];
-                    FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                        NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                        buf, (sizeof(buf) / sizeof(wchar_t)), NULL);
-
-                    wprintf(buf);
                 }
-
-                HANDLE main_thread = debug_ev.u.CreateProcessInfo.hThread;
-
-                CONTEXT ctx;
-                success = GetThreadContext(main_thread, &ctx);
-
-                if (!success) {
-                    printf("Somethin went wrong\n");
-                }
-
-                // s_set_breakpoint_at(debug_ev.u.CreateProcessInfo.lpStartAddress);
             } break;
 
             case CREATE_THREAD_DEBUG_EVENT: {
@@ -328,18 +347,18 @@ static void s_debug_loop(HANDLE process, HANDLE thread_id, const char *exe_name)
             case LOAD_DLL_DEBUG_EVENT: {
                 const char *dll_name = GetFileNameFromHandle(debug_ev.u.LoadDll.hFile);
 
-                DWORD64 dwBase = SymLoadModule64(process, debug_ev.u.LoadDll.hFile, dll_name,
-                    0, (DWORD64)debug_ev.u.LoadDll.lpBaseOfDll, 0);
+                DWORD64 base = SymLoadModule64(
+                    proc_ctx->proc_info.hProcess,
+                    debug_ev.u.LoadDll.hFile,
+                    dll_name,
+                    0,
+                    (DWORD64)debug_ev.u.LoadDll.lpBaseOfDll,
+                    0);
 
-                if (!dwBase) {
+                if (!base) {
                     printf("Symbols were not properly loaded\n");
 
-                    wchar_t buf[256];
-                    FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                        NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                        buf, (sizeof(buf) / sizeof(wchar_t)), NULL);
-
-                    wprintf(buf);
+                    s_print_win32_error("SymLoadModule64");
                 }
 
                 printf("Loaded DLL: %s\n", dll_name);
@@ -347,7 +366,7 @@ static void s_debug_loop(HANDLE process, HANDLE thread_id, const char *exe_name)
                 // Code continues from above
                 IMAGEHLP_MODULE64 module;
                 module.SizeOfStruct = sizeof(module);
-                BOOL success = SymGetModuleInfo64(process, dwBase, &module);
+                BOOL success = WIN32_CALL(SymGetModuleInfo64, proc_ctx->proc_info.hProcess, base, &module);
 
                 // Check and notify
                 if (success && module.SymType == SymPdb) {
@@ -370,8 +389,8 @@ static void s_debug_loop(HANDLE process, HANDLE thread_id, const char *exe_name)
                 void *dst_ptr = malloc(debug_ev.u.DebugString.nDebugStringLength * sizeof(char));
                 size_t bytes_read = 0;
 
-                BOOL success = ReadProcessMemory(
-                    process,
+                BOOL success = WIN32_CALL(ReadProcessMemory,
+                    proc_ctx->proc_info.hProcess,
                     debug_ev.u.DebugString.lpDebugStringData,
                     dst_ptr,
                     debug_ev.u.DebugString.nDebugStringLength,
@@ -415,10 +434,10 @@ static void s_start_process(const char *directory, const char *executable_name) 
         .hStdError = NULL
     };
 
-    // Make sure to close process_info.hProcess and process.hThread with CloseHandle()
-    PROCESS_INFORMATION process_info;
+    lgdb_process_ctx_t *ctx = (lgdb_process_ctx_t *)malloc(sizeof(lgdb_process_ctx_t));
+    ctx->exe_path = exe_path;
 
-    BOOL success = CreateProcessA(
+    WIN32_CALL(CreateProcessA,
         exe_path,
         NULL, // If parameters are to be passed, write the cmdline command here
         NULL,
@@ -428,29 +447,19 @@ static void s_start_process(const char *directory, const char *executable_name) 
         NULL,
         directory,
         &startup_info,
-        &process_info);
+        &ctx->proc_info);
 
-    if (!success) {
-        wchar_t buf[256];
-        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-            NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-            buf, (sizeof(buf) / sizeof(wchar_t)), NULL);
-
-        wprintf(buf);
-    }
-
-    success = SymInitialize(process_info.hProcess, NULL, FALSE);
     // To intidivually load symbols, use SymLoadModule64 (Needs to be in CREATE_PROCESS_DEBUG_EVENT)
 
-    s_debug_loop(process_info.hProcess, process_info.hThread, exe_path);
+    s_debug_loop(ctx);
 
-    CloseHandle(process_info.hThread);
-    CloseHandle(process_info.hProcess);
+    CloseHandle(ctx->proc_info.hThread);
+    CloseHandle(ctx->proc_info.hProcess);
 
     free((void *)exe_path);
 }
 
 void lgdb_test() {
 
-    s_start_process("C:\\Users\\lucro\\Development\\lgdb\\build\\Debug\\", "lgdbtest.exe");
+    s_start_process("C:\\Users\\lucro\\Development\\debugger\\lGdb\\lGdb\\x64\\Debug\\", "lGdb-test.exe");
 }

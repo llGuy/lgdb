@@ -89,6 +89,8 @@ void lgdb_handle_exception_debug_event(lgdb_process_ctx_t *ctx) {
                 &line);
 
             if (success) {
+                success = WIN32_CALL(SymGetLinePrev64, ctx->proc_info.hProcess, &line);
+
                 printf("\t(%s:%p) %s (%s:%d)\n", module.ImageName, (void *)stack.AddrPC.Offset, symbol->Name, line.FileName, line.LineNumber);
             }
             else {

@@ -8,8 +8,6 @@
 #include "lgdb_utility.h"
 #include "lgdb_breakpoint.h"
 
-void lgdb_test();
-
 typedef struct lgdb_process_ctx {
     PROCESS_INFORMATION proc_info;
     DEBUG_EVENT current_event;

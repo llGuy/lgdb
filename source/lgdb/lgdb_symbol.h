@@ -16,4 +16,6 @@ typedef struct lgdb_process_symbols {
     lgdb_module_symbols_t *modules;
 } lgdb_process_symbols_t;
 
+
+
 #endif

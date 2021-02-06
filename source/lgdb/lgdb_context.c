@@ -38,7 +38,7 @@ lgdb_process_ctx_t *lgdb_create_context(const char *directory, const char *exe_n
 
 void lgdb_free_context(lgdb_process_ctx_t *ctx) {
     /* TODO: Make sure to free all the things inside ctx */
-    free(ctx->exe_name);
+    free(ctx->exe_path);
     free(ctx);
 }
 

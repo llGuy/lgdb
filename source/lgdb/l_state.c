@@ -122,7 +122,7 @@ static void s_print_win32_error(const char *win32_function) {
 
 static inline BOOL s_check_win32_call(BOOL result, const char *func) {
     if (!result) {
-        s_print_win32_error(func);
+        // s_print_win32_error(func);
     }
 
     return result;
@@ -162,6 +162,13 @@ static BOOL s_read_proc(
     return success;
 }
 
+static BOOL s_enum_lines(PSRCCODEINFO line_info, PVOID ctx) {
+    IMAGEHLP_LINE64 *line = (IMAGEHLP_LINE64 *)ctx;
+    printf("%d;", line_info->LineNumber);
+
+    return 1;
+}
+
 static void s_process_exception_code(const LPDEBUG_EVENT debug_ev, lgdb_process_ctx_t *proc_ctx) {
     /*
         Process the exception code. When handling exceptions,
@@ -181,7 +188,7 @@ static void s_process_exception_code(const LPDEBUG_EVENT debug_ev, lgdb_process_
             First change: display the current instruction
             and register values.
         */
-        printf("Code breakpoint hit!\n");
+        printf("BREAKPOINT HIT:\n");
 
         CONTEXT ctx = {
             .ContextFlags = CONTEXT_FULL
@@ -237,7 +244,32 @@ static void s_process_exception_code(const LPDEBUG_EVENT debug_ev, lgdb_process_
                 &displacement,
                 symbol);
 
-            printf("%s\n", symbol->Name);
+            IMAGEHLP_LINE64 line = {
+                .SizeOfStruct = sizeof(line)
+            };
+
+            success = WIN32_CALL(
+                SymGetLineFromAddr64,
+                proc_ctx->proc_info.hProcess,
+                stack.AddrPC.Offset,
+                &displacement,
+                &line);
+
+            if (success) {
+                printf("\t(%s:%p) %s (%s:%d)\n", module.ImageName, (void *)stack.AddrPC.Offset, symbol->Name, line.FileName, line.LineNumber);
+
+                success = WIN32_CALL(
+                    SymEnumLines,
+                    proc_ctx->proc_info.hProcess,
+                    proc_ctx->process_pdb_base,
+                    NULL,
+                    line.FileName,
+                    &s_enum_lines,
+                    &line);
+            }
+            else {
+                printf("\t(%s:%p) %s\n", module.ImageName, (void *)stack.AddrPC.Offset, symbol->Name);
+            }
 
         } while (stack.AddrReturn.Offset != 0);
     } break;
@@ -275,6 +307,11 @@ static BOOL s_sym_enum_proc(
     ULONG size,
     PVOID user_ctx) {
     printf("Got symbol: %s\n", sym_info->Name);
+    return 1;
+}
+
+static BOOL s_enum_src_files(PSOURCEFILE src_file, PVOID ctx) {
+    printf("Got source file: %s\n", src_file->FileName);
     return 1;
 }
 
@@ -317,11 +354,19 @@ static void s_debug_loop(lgdb_process_ctx_t *proc_ctx) {
                     &proc_ctx->module_info);
 
                 if (success && proc_ctx->module_info.SymType == SymPdb) {
-                    printf("Symbols were properly loaded\n");
+                    printf("Loaded \'%s\', symbols WERE loaded\n", proc_ctx->exe_path);
                 }
                 else {
-                    printf("Symbols were not properly loaded\n");
+                    printf("Loaded \'%s\', symbols WERE NOT loaded\n", proc_ctx->exe_path);
                 }
+
+                success = WIN32_CALL(
+                    SymEnumSourceFiles,
+                    proc_ctx->proc_info.hProcess,
+                    proc_ctx->process_pdb_base,
+                    "*",
+                    &s_enum_src_files,
+                    NULL);
             } break;
 
             case CREATE_THREAD_DEBUG_EVENT: {
@@ -350,13 +395,12 @@ static void s_debug_loop(lgdb_process_ctx_t *proc_ctx) {
                     (DWORD64)debug_ev.u.LoadDll.lpBaseOfDll,
                     0);
 
-                if (!base) {
-                    printf("Symbols were not properly loaded\n");
-
-                    s_print_win32_error("SymLoadModule64");
+                if (base) {
+                    printf("Loaded \'%s\', ", dll_name);
                 }
-
-                printf("Loaded DLL: %s\n", dll_name);
+                else {
+                    printf("Failed to load \'%s\'\n", dll_name);
+                }
 
                 // Code continues from above
                 IMAGEHLP_MODULE64 module;
@@ -365,10 +409,10 @@ static void s_debug_loop(lgdb_process_ctx_t *proc_ctx) {
 
                 // Check and notify
                 if (success && module.SymType == SymPdb) {
-                    printf("Succeded in loading DLL symbols\n");
+                    printf("symbols WERE loaded\n");
                 }
                 else {
-                    printf("Failed in loading DLL symbols\n");
+                    printf("symbols WERE NOT loaded\n");
                 }
             } break;
 
@@ -376,8 +420,6 @@ static void s_debug_loop(lgdb_process_ctx_t *proc_ctx) {
             } break;
 
             case OUTPUT_DEBUG_STRING_EVENT: {
-                printf("Sent some string to the debugger!\n");
-
                 debug_ev.u.DebugString.lpDebugStringData;
                 debug_ev.u.DebugString.nDebugStringLength;
 
@@ -391,7 +433,7 @@ static void s_debug_loop(lgdb_process_ctx_t *proc_ctx) {
                     debug_ev.u.DebugString.nDebugStringLength,
                     &bytes_read);
 
-                printf((char *)dst_ptr);
+                printf("OutputDebugString: %s", (char *)dst_ptr);
 
                 free(dst_ptr);
             } break;
@@ -456,5 +498,5 @@ static void s_start_process(const char *directory, const char *executable_name) 
 
 void lgdb_test() {
 
-    s_start_process("C:\\Users\\lucro\\Development\\debugger\\lGdb\\lGdb\\x64\\Debug\\", "lGdb-test.exe");
+    s_start_process("C:\\Users\\lucro\\Development\\lgdb\\build\\Debug\\", "lgdbtest.exe");
 }

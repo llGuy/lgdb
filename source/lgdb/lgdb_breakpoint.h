@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define MAX_BREAKPOINTS 100
+
 typedef struct lgdb_breakpoint {
     uint64_t addr;
     const char *file_name;
@@ -15,7 +17,7 @@ typedef struct lgdb_breakpoint {
 typedef struct lgdb_breakpoints {
     /* User-defined breakpoints */
     uint32_t ud_breakpoint_count;
-    lgdb_breakpoint_t *ud_breakpoints;
+    lgdb_breakpoint_t ud_breakpoints[MAX_BREAKPOINTS];
 
     /* Invisible breakpoint (used for single stepping C/C++ code) */
     lgdb_breakpoint_t iv_breakpoint_single_step;

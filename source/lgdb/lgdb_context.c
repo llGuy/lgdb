@@ -11,23 +11,6 @@
 #include "lgdb_utility.h"
 
 
-static BOOL s_enum_lines(PSRCCODEINFO line_info, PVOID ctx) {
-    IMAGEHLP_LINE64 *line = (IMAGEHLP_LINE64 *)ctx;
-    printf("%d;", line_info->LineNumber);
-
-    return 1;
-}
-
-
-static BOOL s_sym_enum_proc(
-    PSYMBOL_INFO sym_info,
-    ULONG size,
-    PVOID user_ctx) {
-    printf("Got symbol: %s\n", sym_info->Name);
-    return 1;
-}
-
-
 lgdb_process_ctx_t *lgdb_create_context(const char *directory, const char *exe_name) {
     lgdb_process_ctx_t *ctx = (lgdb_process_ctx_t *)malloc(sizeof(lgdb_process_ctx_t));
     memset(ctx, 0, sizeof(lgdb_process_ctx_t));

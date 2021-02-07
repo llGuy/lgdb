@@ -6,6 +6,9 @@
 
 typedef uint32_t bool32_t;
 
+#define LGDB_INVALID_HANDLE -1
+typedef int32_t lgdb_handle_t;
+
 const char *lgdb_concat_cstr(const char *a, const char *b);
 void lgdb_print_win32_error(const char *win32_function);
 BOOL lgdb_check_win32_call(BOOL result, const char *func);

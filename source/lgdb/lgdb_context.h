@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <Windows.h>
+#include <DbgHelp.h>
 
 #include "lgdb_symbol.h"
 #include "lgdb_utility.h"

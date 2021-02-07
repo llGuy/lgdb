@@ -10,6 +10,7 @@
 #include "lgdb_event.h"
 #include "lgdb_utility.h"
 
+
 static BOOL s_enum_lines(PSRCCODEINFO line_info, PVOID ctx) {
     IMAGEHLP_LINE64 *line = (IMAGEHLP_LINE64 *)ctx;
     printf("%d;", line_info->LineNumber);

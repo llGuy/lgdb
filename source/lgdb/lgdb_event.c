@@ -2,9 +2,10 @@
 #include <DbgHelp.h>
 #include "lgdb_event.h"
 #include "lgdb_utility.h"
+#include "lgdb_context.h"
 
 
-void lgdb_handle_exception_debug_event(lgdb_process_ctx_t *ctx) {
+void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
     /*
         Process the exception code. When handling exceptions,
         remember to set the continuation status parameter
@@ -136,7 +137,7 @@ static BOOL s_enum_src_files(PSOURCEFILE src_file, PVOID ctx) {
 }
 
 
-void lgdb_handle_create_process_debug_event(lgdb_process_ctx_t *ctx) {
+void lgdb_handle_create_process_debug_event(struct lgdb_process_ctx *ctx) {
     WIN32_CALL(SymInitialize, ctx->proc_info.hProcess, NULL, FALSE);
 
     ctx->process_pdb_base = SymLoadModule64(
@@ -168,26 +169,28 @@ void lgdb_handle_create_process_debug_event(lgdb_process_ctx_t *ctx) {
         "*",
         &s_enum_src_files,
         NULL);
+
+    lgdb_set_breakpointp(ctx, "main");
 }
 
 
-void lgdb_handle_exit_process_debug_event(lgdb_process_ctx_t *ctx) {
+void lgdb_handle_exit_process_debug_event(struct lgdb_process_ctx *ctx) {
     /* TODO */
     ctx->is_running = 0;
 }
 
 
-void lgdb_handle_create_thread_debug_event(lgdb_process_ctx_t *ctx) {
+void lgdb_handle_create_thread_debug_event(struct lgdb_process_ctx *ctx) {
     /* TODO */
 }
 
 
-void lgdb_handle_exit_thread_debug_event(lgdb_process_ctx_t *ctx) {
+void lgdb_handle_exit_thread_debug_event(struct lgdb_process_ctx *ctx) {
     /* TODO */
 }
 
 
-void lgdb_handle_load_dll_debug_event(lgdb_process_ctx_t *ctx) {
+void lgdb_handle_load_dll_debug_event(struct lgdb_process_ctx *ctx) {
     const char *dll_name = lgdb_get_file_name_from_handle(ctx->current_event.u.LoadDll.hFile);
 
     DWORD64 base = SymLoadModule64(
@@ -224,12 +227,12 @@ void lgdb_handle_load_dll_debug_event(lgdb_process_ctx_t *ctx) {
 }
 
 
-void lgdb_handle_unload_dll_debug_event(lgdb_process_ctx_t *ctx) {
+void lgdb_handle_unload_dll_debug_event(struct lgdb_process_ctx *ctx) {
     /* TODO */
 }
 
 
-void lgdb_handle_output_debug_string_event(lgdb_process_ctx_t *ctx) {
+void lgdb_handle_output_debug_string_event(struct lgdb_process_ctx *ctx) {
     ctx->current_event.u.DebugString.lpDebugStringData;
     ctx->current_event.u.DebugString.nDebugStringLength;
 

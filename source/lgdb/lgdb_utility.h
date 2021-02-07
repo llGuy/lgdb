@@ -2,6 +2,7 @@
 #define LGDB_UTILITY_H
 
 #include <stdint.h>
+#include <Windows.h>
 
 typedef uint32_t bool32_t;
 

@@ -8,7 +8,6 @@ int global_variable = 12;
 
 void foo() {
     OutputDebugString("In foo\n");
-    __debugbreak();
 }
 
 
@@ -28,10 +27,13 @@ int main() {
 
     foo();
 
+    foo();
 
+    foo();
 
 
     OutputDebugString("Hello debugger0\n");
+
     DebugBreak();
 
     return 0;

@@ -1,6 +1,7 @@
 #include <Windows.h>
 #include <DbgHelp.h>
 #include <stdio.h>
+#include <assert.h>
 #include "lgdb_event.h"
 #include "lgdb_utility.h"
 #include "lgdb_context.h"
@@ -24,20 +25,21 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
         lgdb_retrieve_thread_context(ctx);
 
         /* Check if the breakpoint was user-defined */
-        lgdb_entry_value_t *val = lgdb_get_from_tablep(
+        lgdb_entry_value_t *breakpoint_hdl = lgdb_get_from_tablep(
             &ctx->breakpoints.addr64_to_ud_idx,
             (void *)(ctx->thread_ctx.Rip - 1));
 
         lgdb_update_call_stack(ctx);
 
         /* User defined breakpoint */
-        if (val) {
+        if (breakpoint_hdl) {
             printf("BREAKPOINT at user-defined breakpoint\n");
 
             /* Revert int3 op byte to original byte */
-            lgdb_revert_to_original_byte(ctx, *val);
+            lgdb_revert_to_original_byte(ctx, *breakpoint_hdl);
 
             /* Set trap flag so that we can put the breakpoint back! */
+            lgdb_preserve_breakpoint(ctx, *breakpoint_hdl);
 
             --ctx->thread_ctx.Rip;
             lgdb_sync_process_thread_context(ctx);
@@ -55,10 +57,20 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
     } break;
 
     case EXCEPTION_SINGLE_STEP: {
-        /*
-            First chance: pass this on to the system
-            Last chance: display an appropriate error
-        */
+        lgdb_retrieve_thread_context(ctx);
+
+        if (ctx->breakpoints.preserve_breakpoint) {
+            lgdb_handle_t hdl = ctx->breakpoints.breakpoint_to_preserve;
+            assert(hdl != LGDB_INVALID_HANDLE);
+
+            lgdb_breakpoint_t *breakpoint = &ctx->breakpoints.ud_breakpoints[hdl];
+            uint8_t op_byte;
+            bool32_t success = lgdb_put_breakpoint_in_bin(ctx, (void *)breakpoint->addr, &op_byte);
+
+            ctx->thread_ctx.EFlags;
+
+            ctx->breakpoints.preserve_breakpoint = 0;
+        }
     } break;
 
     case DBG_CONTROL_C: {

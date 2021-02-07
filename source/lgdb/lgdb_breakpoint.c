@@ -7,6 +7,44 @@
 #include "lgdb_breakpoint.h"
 
 
+bool32_t lgdb_put_breakpoint_in_bin(
+    struct lgdb_process_ctx *ctx,
+    void *addr64,
+    uint8_t *original) {
+    uint8_t op_byte;
+    size_t bytes_read;
+
+    WIN32_CALL(
+        ReadProcessMemory,
+        ctx->proc_info.hProcess,
+        addr64,
+        &op_byte,
+        1,
+        &bytes_read);
+
+    *original = op_byte;
+
+    uint8_t int3 = LGDB_OP_INT3;
+    size_t bytes_written;
+
+    BOOL success = WIN32_CALL(
+        WriteProcessMemory,
+        ctx->proc_info.hProcess,
+        addr64,
+        &int3,
+        1,
+        &bytes_written);
+
+    success &= WIN32_CALL(
+        FlushInstructionCache,
+        ctx->proc_info.hProcess,
+        addr64,
+        1);
+
+    return (bool32_t)success;
+}
+
+
 void lgdb_set_breakpointp(
     struct lgdb_process_ctx *ctx,
     const char *function_name) {
@@ -32,28 +70,12 @@ void lgdb_set_breakpointp(
         breakpoint->file_name = NULL;
 
         uint8_t op_byte;
-        size_t bytes_read;
-
-        WIN32_CALL(
-            ReadProcessMemory,
-            ctx->proc_info.hProcess,
-            (void *)symbol->Address,
-            &op_byte,
-            1,
-            &bytes_read);
+        success = (BOOL)lgdb_put_breakpoint_in_bin(
+            ctx,
+            symbol->Address,
+            &op_byte);
 
         breakpoint->original_asm_op = op_byte;
-
-        uint8_t int3 = LGDB_OP_INT3;
-        size_t bytes_written;
-
-        success = WIN32_CALL(
-            WriteProcessMemory,
-            ctx->proc_info.hProcess,
-            (void *)symbol->Address,
-            &int3,
-            1,
-            &bytes_written);
 
         if (success) {
             printf(
@@ -61,14 +83,8 @@ void lgdb_set_breakpointp(
                 symbol->Name,
                 (void *)symbol->Address,
                 (uint32_t)op_byte,
-                (uint32_t)int3);
+                (uint32_t)0xCC);
         }
-
-        WIN32_CALL(
-            FlushInstructionCache,
-            ctx->proc_info.hProcess,
-            (void *)symbol->Address,
-            1);
     }
 }
 
@@ -102,4 +118,13 @@ void lgdb_revert_to_original_byte(struct lgdb_process_ctx *ctx, lgdb_handle_t br
         ctx->proc_info.hProcess,
         (void *)breakpoint->addr,
         1);
+}
+
+
+void lgdb_preserve_breakpoint(struct lgdb_process_ctx *ctx, lgdb_handle_t breakpoint_hdl) {
+    ctx->breakpoints.preserve_breakpoint = 1;
+    ctx->breakpoints.breakpoint_to_preserve = breakpoint_hdl;
+
+    /* Flag 8 corresponds to the trap flag which will trigger EXCEPTION_SINGLE_STEP */
+    ctx->thread_ctx.EFlags |= (1 << 8);
 }

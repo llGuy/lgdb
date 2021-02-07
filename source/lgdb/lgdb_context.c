@@ -16,6 +16,9 @@ lgdb_process_ctx_t *lgdb_create_context(const char *directory, const char *exe_n
     memset(ctx, 0, sizeof(lgdb_process_ctx_t));
     ctx->directory = directory;
     ctx->exe_name = exe_name;
+    ctx->breakpoints.addr64_to_ud_idx = lgdb_create_table(LGDB_MAX_BREAKPOINTS, LGDB_MAX_BREAKPOINTS);
+    ctx->call_stack.frame_count = 0;
+
     return ctx;
 }
 
@@ -139,4 +142,20 @@ void lgdb_continue_process(lgdb_process_ctx_t *ctx) {
         ctx->current_event.dwProcessId,
         ctx->current_event.dwThreadId,
         DBG_CONTINUE);
+}
+
+
+BOOL lgdb_retrieve_thread_context(lgdb_process_ctx_t *ctx) {
+    memset(&ctx->thread_ctx, 0, sizeof(CONTEXT));
+    ctx->thread_ctx.ContextFlags = CONTEXT_FULL;
+
+    return WIN32_CALL(
+        GetThreadContext,
+        ctx->proc_info.hThread,
+        &ctx->thread_ctx);
+}
+
+
+void lgdb_sync_process_thread_context(lgdb_process_ctx_t *ctx) {
+    WIN32_CALL(SetThreadContext, ctx->proc_info.hThread, &ctx->thread_ctx);
 }

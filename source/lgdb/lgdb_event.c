@@ -1,5 +1,6 @@
 #include <Windows.h>
 #include <DbgHelp.h>
+#include <stdio.h>
 #include "lgdb_event.h"
 #include "lgdb_utility.h"
 #include "lgdb_context.h"
@@ -14,104 +15,49 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
     switch (ctx->current_event.u.Exception.ExceptionRecord.ExceptionCode) {
     case EXCEPTION_ACCESS_VIOLATION: {
         /*
-            First change: pass this on to the system
+            First chance: pass this on to the system
             Last chance: display an appropriate error
         */
     } break;
 
     case EXCEPTION_BREAKPOINT: {
-        /*
-            First change: display the current instruction
-            and register values.
-        */
-        printf("BREAKPOINT HIT:\n");
+        lgdb_retrieve_thread_context(ctx);
 
-        CONTEXT thread_ctx = {
-            .ContextFlags = CONTEXT_FULL
-        };
+        /* Check if the breakpoint was user-defined */
+        lgdb_entry_value_t *val = lgdb_get_from_tablep(
+            &ctx->breakpoints.addr64_to_ud_idx,
+            (void *)(ctx->thread_ctx.Rip - 1));
 
-        BOOL success = WIN32_CALL(
-            GetThreadContext,
-            ctx->proc_info.hThread,
-            &thread_ctx);
+        lgdb_update_call_stack(ctx);
 
-        STACKFRAME64 stack = {
-            .AddrPC.Offset = thread_ctx.Rip,
-            .AddrPC.Mode = AddrModeFlat,
-            .AddrFrame.Offset = thread_ctx.Rbp,
-            .AddrFrame.Mode = AddrModeFlat,
-            .AddrStack.Offset = thread_ctx.Rsp,
-            .AddrStack.Mode = AddrModeFlat
-        };
+        /* User defined breakpoint */
+        if (val) {
+            printf("BREAKPOINT at user-defined breakpoint\n");
 
-        do {
-            success = WIN32_CALL(StackWalk64,
-                IMAGE_FILE_MACHINE_AMD64,
-                ctx->proc_info.hProcess,
-                ctx->proc_info.hThread,
-                &stack,
-                &thread_ctx,
-                lgdb_read_proc,
-                SymFunctionTableAccess64,
-                SymGetModuleBase64, 0);
+            /* Revert int3 op byte to original byte */
+            lgdb_revert_to_original_byte(ctx, *val);
 
-            IMAGEHLP_MODULE64 module = { 0 };
-            module.SizeOfStruct = sizeof(module);
-            WIN32_CALL(
-                SymGetModuleInfo64,
-                ctx->proc_info.hProcess,
-                (DWORD64)stack.AddrPC.Offset,
-                &module);
+            /* Set trap flag so that we can put the breakpoint back! */
 
-            // Read information in the stack structure and map to symbol file
-            DWORD64 displacement;
-            IMAGEHLP_SYMBOL64 *symbol = (IMAGEHLP_SYMBOL64 *)malloc(sizeof(IMAGEHLP_SYMBOL64) + MAX_SYM_NAME);
-
-            memset(symbol, 0, sizeof(IMAGEHLP_SYMBOL64) + MAX_SYM_NAME);
-            symbol->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
-            symbol->MaxNameLength = MAX_SYM_NAME;
-
-            WIN32_CALL(
-                SymGetSymFromAddr64,
-                ctx->proc_info.hProcess,
-                stack.AddrPC.Offset,
-                &displacement,
-                symbol);
-
-            IMAGEHLP_LINE64 line = {
-                .SizeOfStruct = sizeof(line)
-            };
-
-            success = WIN32_CALL(
-                SymGetLineFromAddr64,
-                ctx->proc_info.hProcess,
-                stack.AddrPC.Offset,
-                &displacement,
-                &line);
-
-            if (success) {
-                success = WIN32_CALL(SymGetLinePrev64, ctx->proc_info.hProcess, &line);
-
-                printf("\t(%s:%p) %s (%s:%d)\n", module.ImageName, (void *)stack.AddrPC.Offset, symbol->Name, line.FileName, line.LineNumber);
-            }
-            else {
-                printf("\t(%s:%p) %s\n", module.ImageName, (void *)stack.AddrPC.Offset, symbol->Name);
-            }
-
-        } while (stack.AddrReturn.Offset != 0);
+            --ctx->thread_ctx.Rip;
+            lgdb_sync_process_thread_context(ctx);
+        }
+        else {
+            printf("BREAKPOINT at __debugbreak() call\n");
+        }
     } break;
 
     case EXCEPTION_DATATYPE_MISALIGNMENT: {
         /*
-            First change: pass this on to the system
-            Last change: display an appropriate error
+            First chance: pass this on to the system
+            Last chance: display an appropriate error
         */
     } break;
 
     case EXCEPTION_SINGLE_STEP: {
         /*
             First chance: pass this on to the system
-            Last change: display an appropriate error
+            Last chance: display an appropriate error
         */
     } break;
 
@@ -171,6 +117,7 @@ void lgdb_handle_create_process_debug_event(struct lgdb_process_ctx *ctx) {
         NULL);
 
     lgdb_set_breakpointp(ctx, "main");
+    lgdb_set_breakpointp(ctx, "foo");
 }
 
 

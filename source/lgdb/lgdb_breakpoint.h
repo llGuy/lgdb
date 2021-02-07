@@ -2,8 +2,10 @@
 #define LGDB_BREAKPOINT_H
 
 #include <stdint.h>
+#include <lgdb_table.h>
 
-#define MAX_BREAKPOINTS 100
+#define LGDB_MAX_BREAKPOINTS 100
+#define LGDB_OP_INT3 0xCC
 
 typedef struct lgdb_breakpoint {
     uint64_t addr;
@@ -17,7 +19,10 @@ typedef struct lgdb_breakpoint {
 typedef struct lgdb_breakpoints {
     /* User-defined breakpoints */
     uint32_t ud_breakpoint_count;
-    lgdb_breakpoint_t ud_breakpoints[MAX_BREAKPOINTS];
+    lgdb_breakpoint_t ud_breakpoints[LGDB_MAX_BREAKPOINTS];
+
+    /* Table which maps an address to a breakpoint */
+    lgdb_table_t addr64_to_ud_idx;
 
     /* Invisible breakpoint (used for single stepping C/C++ code) */
     lgdb_breakpoint_t iv_breakpoint_single_step;
@@ -27,5 +32,6 @@ typedef struct lgdb_breakpoints {
 void lgdb_set_breakpointp(struct lgdb_process_ctx *ctx, const char *function_name);
 /* Set breakpoint with file name and line number */
 void lgdb_set_breakpointfl(struct lgdb_process_ctx *ctx, const char *file_name, uint32_t line_number);
+void lgdb_revert_to_original_byte(struct lgdb_process_ctx *ctx, lgdb_handle_t breakpoint_hdl);
 
 #endif

@@ -133,3 +133,35 @@ BOOL lgdb_read_proc(
     return success;
 }
 
+
+uint32_t lgdb_hash_string(const char *string) {
+    unsigned long hash = 5381;
+    uint32_t c;
+
+    while (c = *string++) {
+        hash = ((hash << 5) + hash) + c;
+    }
+
+    return hash;
+}
+
+
+uint32_t lgdb_hash_buffer(const char *string, uint32_t length) {
+    unsigned long hash = 5381;
+
+    uint32_t current = 0;
+
+    while (current < length) {
+        hash = ((hash << 5) + hash) + string[current];
+
+        ++current;
+    }
+
+    return hash;
+}
+
+
+uint32_t lgdb_hash_pointer(void *p) {
+    uint64_t u64 = (uint64_t)p;
+    return (u64 & 0xffffffff) + (u64 >> 32);
+}

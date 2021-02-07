@@ -3,11 +3,14 @@
 #include <Windows.h>
 #include <DbgHelp.h>
 
+
 extern "C" {
 
+#include <lgdb_table.h>
 #include <lgdb_context.h>
 
 }
+
 
 int main() {
     /* Initialise context of the debugging process */

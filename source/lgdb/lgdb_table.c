@@ -1,3 +1,4 @@
+#include <assert.h>
 #include "lgdb_table.h"
 
 
@@ -47,17 +48,25 @@ lgdb_table_t lgdb_create_table(uint32_t bucket_count, uint32_t max_entries) {
 }
 
 
+void lgdb_free_table(lgdb_table_t *table) {
+    free(table->buckets);
+    free(table->pool);
+}
+
+
 void lgdb_clear_table(lgdb_table_t *table) {
     for (uint32_t i = 0; i < table->bucket_count; ++i) {
         table->buckets[i] = LGDB_INVALID_HANDLE;
     }
 
+    memset(table->pool, 0, sizeof(lgdb_entry_t) * table->max_entries);
+
     table->pool_ptr = 0;
 }
 
 
-bool32_t lgdb_insert_in_table(lgdb_table_t *table, uint32_t key, int32_t value) {
-    uint32_t actual_key = s_extract_actual_key(key);
+bool32_t lgdb_insert_in_table(lgdb_table_t *table, uint32_t raw_key, lgdb_entry_value_t value) {
+    uint32_t actual_key = s_extract_actual_key(raw_key);
     uint32_t bucket_idx = actual_key % table->bucket_count;
 
     lgdb_handle_t *entry_p = &table->buckets[bucket_idx];
@@ -89,7 +98,14 @@ bool32_t lgdb_insert_in_table(lgdb_table_t *table, uint32_t key, int32_t value) 
 
                 return 1;
             }
+            else if (current_entry->key == actual_key) {
+                /* Element was already added */
+                return 0;
+            }
         }
+
+        if (current_entry->key == actual_key && current_entry->is_initialised)
+            return 0;
 
         current_entry->next_entry = s_allocate_entry(table);
 
@@ -101,4 +117,75 @@ bool32_t lgdb_insert_in_table(lgdb_table_t *table, uint32_t key, int32_t value) 
 
         return 1;
     }
+}
+
+
+bool32_t lgdb_insert_in_tables(lgdb_table_t *table, const char *str, lgdb_entry_value_t value) {
+    lgdb_insert_in_table(table, lgdb_hash_string(str), value);
+}
+
+
+bool32_t lgdb_insert_in_tablep(lgdb_table_t *table, void *p, lgdb_entry_value_t value) {
+    lgdb_insert_in_table(table, lgdb_hash_pointer(p), value);
+}
+
+
+lgdb_entry_value_t *lgdb_get_from_table(const lgdb_table_t *table, uint32_t raw_key) {
+    uint32_t actual_key = s_extract_actual_key(raw_key);
+    uint32_t bucket_idx = actual_key % table->bucket_count;
+
+    lgdb_handle_t entry_hdl = table->buckets[bucket_idx];
+
+    while (entry_hdl != LGDB_INVALID_HANDLE) {
+        lgdb_entry_t *entry = s_get_entry(table, entry_hdl);
+
+        if (entry->is_initialised && entry->key == actual_key) {
+            return &entry->value;
+        }
+
+        entry_hdl = entry->next_entry;
+    }
+
+    return NULL;
+}
+
+
+lgdb_entry_value_t *lgdb_get_from_tables(const lgdb_table_t *table, const char *str) {
+    return lgdb_get_from_table(table, lgdb_hash_string(str));
+}
+
+
+lgdb_entry_value_t *lgdb_get_from_tablep(const lgdb_table_t *table, void *p) {
+    return lgdb_get_from_table(table, lgdb_hash_pointer(p));
+}
+
+
+bool32_t lgdb_remove_from_table(lgdb_table_t *table, uint32_t raw_key) {
+    uint32_t actual_key = s_extract_actual_key(raw_key);
+    uint32_t bucket_idx = actual_key % table->bucket_count;
+
+    lgdb_handle_t entry_hdl = table->buckets[bucket_idx];
+
+    while (entry_hdl != LGDB_INVALID_HANDLE) {
+        lgdb_entry_t *entry = s_get_entry(table, entry_hdl);
+
+        if (entry->is_initialised && entry->key == actual_key) {
+            entry->is_initialised = 0;
+            return 1;
+        }
+
+        entry_hdl = entry->next_entry;
+    }
+
+    return 0;
+}
+
+
+bool32_t lgdb_remove_from_tables(lgdb_table_t *table, const char *str) {
+    return lgdb_remove_from_table(table, lgdb_hash_string(str));
+}
+
+
+bool32_t lgdb_remove_from_tablep(lgdb_table_t *table, void *p) {
+    return lgdb_remove_from_table(table, lgdb_hash_pointer(p));
 }

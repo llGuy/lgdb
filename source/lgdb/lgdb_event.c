@@ -67,8 +67,6 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
             uint8_t op_byte;
             bool32_t success = lgdb_put_breakpoint_in_bin(ctx, (void *)breakpoint->addr, &op_byte);
 
-            ctx->thread_ctx.EFlags;
-
             ctx->breakpoints.preserve_breakpoint = 0;
         }
     } break;
@@ -119,17 +117,6 @@ void lgdb_handle_create_process_debug_event(struct lgdb_process_ctx *ctx) {
     else {
         printf("Loaded \'%s\', symbols WERE NOT loaded\n", ctx->exe_path);
     }
-
-    WIN32_CALL(
-        SymEnumSourceFiles,
-        ctx->proc_info.hProcess,
-        ctx->process_pdb_base,
-        "*",
-        &s_enum_src_files,
-        NULL);
-
-    lgdb_set_breakpointp(ctx, "main");
-    lgdb_set_breakpointp(ctx, "foo");
 }
 
 

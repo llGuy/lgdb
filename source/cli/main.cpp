@@ -18,6 +18,10 @@ int main() {
         "C:\\Users\\lucro\\Development\\lgdb\\build\\Debug\\",
         "lgdbtest.exe");
 
+    /* Example of setting breakpoints (before the process began) */
+    lgdb_add_breakpointp(debug_ctx, "main");
+    lgdb_add_breakpointp(debug_ctx, "foo");
+
     /* Start the process that is going to be debugged */
     lgdb_begin_process(debug_ctx);
 

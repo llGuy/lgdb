@@ -45,6 +45,7 @@ void lgdb_free_context(lgdb_process_ctx_t *ctx);
 bool32_t lgdb_begin_process(lgdb_process_ctx_t *ctx);
 void lgdb_close_process(lgdb_process_ctx_t *ctx);
 void lgdb_poll_debug_events(lgdb_process_ctx_t *ctx);
+/* Also does things like flushing all pending breakpoints */
 void lgdb_continue_process(lgdb_process_ctx_t *ctx);
 BOOL lgdb_retrieve_thread_context(lgdb_process_ctx_t *ctx);
 void lgdb_sync_process_thread_context(lgdb_process_ctx_t *ctx);

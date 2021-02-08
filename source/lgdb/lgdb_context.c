@@ -138,6 +138,8 @@ void lgdb_poll_debug_events(lgdb_process_ctx_t *ctx) {
 
 
 void lgdb_continue_process(lgdb_process_ctx_t *ctx) {
+    lgdb_flush_pending_breakpoints(ctx);
+
     ContinueDebugEvent(
         ctx->current_event.dwProcessId,
         ctx->current_event.dwThreadId,

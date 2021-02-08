@@ -6,6 +6,7 @@
 #include <DbgHelp.h>
 
 #include "lgdb_symbol.h"
+#include "lgdb_dissasm.h"
 #include "lgdb_utility.h"
 #include "lgdb_breakpoint.h"
 #include "lgdb_call_stack.h"
@@ -23,6 +24,7 @@ typedef struct lgdb_process_ctx {
     lgdb_process_symbols_t symbols;
     lgdb_breakpoints_t breakpoints;
     lgdb_call_stack_t call_stack;
+    lgdb_dissasm_t dissasm;
 
     union {
         const char *exe_path;

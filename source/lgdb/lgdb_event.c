@@ -42,6 +42,21 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
             lgdb_preserve_breakpoint(ctx, *breakpoint_hdl);
 
             --ctx->thread_ctx.Rip;
+
+            uint8_t instr_buf[15] = {0};
+            size_t bytes_read;
+
+            WIN32_CALL(
+                ReadProcessMemory,
+                ctx->proc_info.hProcess,
+                (void *)ctx->thread_ctx.Rip,
+                instr_buf,
+                15,
+                &bytes_read);
+
+            lgdb_machine_instruction_t instr;
+            lgdb_decode_instruction_at(&ctx->dissasm, instr_buf, 15, &instr);
+
             lgdb_sync_process_thread_context(ctx);
         }
         else {

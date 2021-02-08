@@ -29,7 +29,16 @@ int main() {
     /* Debugger loop */
     while (debug_ctx->is_running) {
         /* Poll all debug events and handle accordingly with callbacks */
-        lgdb_poll_debug_events(debug_ctx);
+        lgdb_user_event_t ev = {};
+        bool got_event = lgdb_get_debug_event(debug_ctx, &ev);
+
+        if (got_event) {
+            /* should_continue will be true if we need to  */
+            bool should_continue = false;
+            while (!should_continue) {
+
+            }
+        }
 
         /* Make the process continue */
         lgdb_continue_process(debug_ctx);

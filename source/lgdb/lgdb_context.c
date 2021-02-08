@@ -83,7 +83,7 @@ void lgdb_close_process(lgdb_process_ctx_t *ctx) {
 }
 
 
-void lgdb_poll_debug_events(lgdb_process_ctx_t *ctx) {
+bool32_t lgdb_get_debug_event(lgdb_process_ctx_t *ctx, lgdb_user_event_t *dst) {
     // TODO: Figure out what the difference between process and debug_ev.u.CreateProcessInfo.hProcess is
 
     /* Wait for debugger event to occur */
@@ -132,9 +132,20 @@ void lgdb_poll_debug_events(lgdb_process_ctx_t *ctx) {
         } break;
 
         }
+
+        if (ctx->triggered_user_event) {
+            ctx->triggered_user_event = 0;
+
+            dst->ev_data = ctx->current_user_event.ev_data;
+            dst->ev_type = ctx->current_user_event.ev_type;
+            return 1;
+        }
+        else {
+            return 0;
+        }
     }
     else {
-        printf("Didn't receive debug event\n");
+        return 0;
     }
 }
 

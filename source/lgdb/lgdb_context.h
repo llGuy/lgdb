@@ -5,6 +5,7 @@
 #include <Windows.h>
 #include <DbgHelp.h>
 
+#include "lgdb_event.h"
 #include "lgdb_symbol.h"
 #include "lgdb_dissasm.h"
 #include "lgdb_utility.h"
@@ -25,6 +26,7 @@ typedef struct lgdb_process_ctx {
     lgdb_breakpoints_t breakpoints;
     lgdb_call_stack_t call_stack;
     lgdb_dissasm_t dissasm;
+    lgdb_user_event_t current_user_event;
 
     union {
         const char *exe_path;
@@ -38,6 +40,7 @@ typedef struct lgdb_process_ctx {
         uint32_t flags;
         struct {
             uint32_t is_running : 1;
+            uint32_t triggered_user_event : 1;
         };
     };
 } lgdb_process_ctx_t;
@@ -46,7 +49,7 @@ lgdb_process_ctx_t *lgdb_create_context(const char *directory, const char *exe_n
 void lgdb_free_context(lgdb_process_ctx_t *ctx);
 bool32_t lgdb_begin_process(lgdb_process_ctx_t *ctx);
 void lgdb_close_process(lgdb_process_ctx_t *ctx);
-void lgdb_poll_debug_events(lgdb_process_ctx_t *ctx);
+bool32_t lgdb_get_debug_event(lgdb_process_ctx_t *ctx, lgdb_user_event_t *dst);
 /* Also does things like flushing all pending breakpoints */
 void lgdb_continue_process(lgdb_process_ctx_t *ctx);
 BOOL lgdb_retrieve_thread_context(lgdb_process_ctx_t *ctx);

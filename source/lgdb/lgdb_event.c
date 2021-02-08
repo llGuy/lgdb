@@ -211,3 +211,10 @@ void lgdb_handle_output_debug_string_event(struct lgdb_process_ctx *ctx) {
 
     free(dst_ptr);
 }
+
+
+void lgdb_trigger_user_event(lgdb_process_ctx_t *ctx, uint32_t ev_type, void *ev_data) {
+    ctx->triggered_user_event = 1;
+    ctx->current_user_event.ev_type = ev_type;
+    ctx->current_user_event.ev_data = ev_data;
+}

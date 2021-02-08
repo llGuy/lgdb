@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include "lgdb_event.h"
+#include "lgdb_symbol.h"
 #include "lgdb_utility.h"
 #include "lgdb_context.h"
 
@@ -43,6 +44,7 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
 
             --ctx->thread_ctx.Rip;
 
+#if 0
             uint8_t instr_buf[15] = {0};
             size_t bytes_read;
 
@@ -56,8 +58,19 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
 
             lgdb_machine_instruction_t instr;
             lgdb_decode_instruction_at(&ctx->dissasm, instr_buf, 15, &instr);
+#endif
 
             lgdb_sync_process_thread_context(ctx);
+
+            /* Trigger the breakpoint user event */
+            IMAGEHLP_LINE64 line_info = lgdb_make_line_info_from_addr(ctx, (void *)ctx->thread_ctx.Rip);
+            if (line_info.SizeOfStruct) {
+                lgdb_user_event_valid_breakpoint_hit_t *lvbh_data =
+                    LGDB_LNMALLOC(&ctx->lnmem, lgdb_user_event_valid_breakpoint_hit_t, 1);
+                lvbh_data->file_name = line_info.FileName;
+                lvbh_data->line_number = line_info.LineNumber;
+                lgdb_trigger_user_event(ctx, LUET_VALID_BREAKPOINT_HIT, lvbh_data);
+            }
         }
         else {
             printf("BREAKPOINT at __debugbreak() call\n");
@@ -213,7 +226,7 @@ void lgdb_handle_output_debug_string_event(struct lgdb_process_ctx *ctx) {
 }
 
 
-void lgdb_trigger_user_event(lgdb_process_ctx_t *ctx, uint32_t ev_type, void *ev_data) {
+void lgdb_trigger_user_event(struct lgdb_process_ctx *ctx, uint32_t ev_type, void *ev_data) {
     ctx->triggered_user_event = 1;
     ctx->current_user_event.ev_type = ev_type;
     ctx->current_user_event.ev_data = ev_data;

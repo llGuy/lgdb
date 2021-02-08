@@ -18,6 +18,8 @@ lgdb_process_ctx_t *lgdb_create_context(const char *directory, const char *exe_n
     ctx->exe_name = exe_name;
     ctx->breakpoints.addr64_to_ud_idx = lgdb_create_table(LGDB_MAX_BREAKPOINTS, LGDB_MAX_BREAKPOINTS);
     ctx->call_stack.frame_count = 0;
+    ctx->lnmem = lgdb_create_linear_allocator(lgdb_kilobytes(300));
+
     ZydisDecoderInit(&ctx->dissasm.decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_ADDRESS_WIDTH_64);
     ZydisFormatterInit(&ctx->dissasm.formatter, ZYDIS_FORMATTER_STYLE_INTEL);
 
@@ -157,6 +159,8 @@ void lgdb_continue_process(lgdb_process_ctx_t *ctx) {
         ctx->current_event.dwProcessId,
         ctx->current_event.dwThreadId,
         DBG_CONTINUE);
+
+    lgdb_lnclear(&ctx->lnmem);
 }
 
 

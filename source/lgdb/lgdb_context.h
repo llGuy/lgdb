@@ -5,6 +5,7 @@
 #include <Windows.h>
 #include <DbgHelp.h>
 
+#include "lgdb_alloc.h"
 #include "lgdb_event.h"
 #include "lgdb_symbol.h"
 #include "lgdb_dissasm.h"
@@ -27,6 +28,7 @@ typedef struct lgdb_process_ctx {
     lgdb_call_stack_t call_stack;
     lgdb_dissasm_t dissasm;
     lgdb_user_event_t current_user_event;
+    lgdb_linear_allocator_t lnmem;
 
     union {
         const char *exe_path;

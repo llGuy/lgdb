@@ -33,8 +33,9 @@ int main() {
         bool got_event = lgdb_get_debug_event(debug_ctx, &ev);
 
         if (got_event) {
+            printf("GOT EVENTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT\n");
             /* should_continue will be true if we need to  */
-            bool should_continue = false;
+            bool should_continue = true;
             while (!should_continue) {
 
             }

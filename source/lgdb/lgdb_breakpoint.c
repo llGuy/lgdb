@@ -31,12 +31,37 @@ static IMAGEHLP_SYMBOL64 *s_make_symbol_info(
 }
 
 
+static IMAGEHLP_LINE64 s_make_line_info(
+    lgdb_process_ctx_t *ctx,
+    const char *file_name,
+    uint32_t line_number) {
+    IMAGEHLP_LINE64 line = {
+        .SizeOfStruct = sizeof(line)
+    };
+
+    uint32_t displacement;
+    BOOL success = WIN32_CALL(SymGetLineFromName64,
+        ctx->proc_info.hProcess,
+        ctx->module_info.ModuleName,
+        file_name,
+        line_number,
+        &displacement,
+        &line);
+
+    if (!success) {
+        memset(&line, 0, sizeof(line));
+    }
+
+    return line;
+}
+
+
 static void s_free_symbol_info(IMAGEHLP_SYMBOL64 *symbol) {
     free(symbol);
 }
 
 
-void lgdb_add_breakpointp(struct lgdb_process_ctx *ctx, const char *function_name) {
+static lgdb_handle_t s_prepare_new_breakpoint(struct lgdb_process_ctx *ctx) {
     lgdb_handle_t breakpoint_hdl = ctx->breakpoints.ud_breakpoint_count++;
     lgdb_breakpoint_t *breakpoint = &ctx->breakpoints.ud_breakpoints[breakpoint_hdl];
 
@@ -45,6 +70,13 @@ void lgdb_add_breakpointp(struct lgdb_process_ctx *ctx, const char *function_nam
     breakpoint->file_name = NULL;
     breakpoint->line_number = 0;
     breakpoint->original_asm_op = 0;
+
+    return breakpoint_hdl;
+}
+
+
+void lgdb_add_breakpointp(struct lgdb_process_ctx *ctx, const char *function_name) {
+    lgdb_handle_t breakpoint_hdl = s_prepare_new_breakpoint(ctx);
 
     uint16_t pending = ctx->breakpoints.pending_breakpoint_count++;
     lgdb_pending_breakpoint_t *pend = &ctx->breakpoints.pending_breakpoints[pending];
@@ -55,7 +87,14 @@ void lgdb_add_breakpointp(struct lgdb_process_ctx *ctx, const char *function_nam
 
 
 void lgdb_add_breakpointfl(struct lgdb_process_ctx *ctx, const char *file_name, uint32_t line_number) {
-    /* TODO */
+    lgdb_handle_t breakpoint_hdl = s_prepare_new_breakpoint(ctx);
+
+    uint16_t pending = ctx->breakpoints.pending_breakpoint_count++;
+    lgdb_pending_breakpoint_t *pend = &ctx->breakpoints.pending_breakpoints[pending];
+    pend->hdl = (uint16_t)breakpoint_hdl;
+    pend->called_function = LPBT_ADD_BREAKPOINTFL;
+    pend->fl.file_name = file_name;
+    pend->fl.line_number = line_number;
 }
 
 
@@ -75,7 +114,9 @@ void lgdb_flush_pending_breakpoints(struct lgdb_process_ctx *ctx) {
         } break;
 
         case LPBT_ADD_BREAKPOINTFL: {
-            /* TODO */
+            IMAGEHLP_LINE64 line = s_make_line_info(ctx, pend->fl.file_name, pend->fl.line_number);
+
+            breakpoint->addr = line.Address;
         } break;
 
         default: {
@@ -90,7 +131,7 @@ void lgdb_flush_pending_breakpoints(struct lgdb_process_ctx *ctx) {
         uint8_t op_byte;
         BOOL success = (BOOL)lgdb_put_breakpoint_in_bin(
             ctx,
-            breakpoint->addr,
+            (void *)breakpoint->addr,
             &op_byte);
 
         breakpoint->original_asm_op = op_byte;
@@ -106,7 +147,6 @@ void lgdb_flush_pending_breakpoints(struct lgdb_process_ctx *ctx) {
 
     ctx->breakpoints.pending_breakpoint_count = 0;
 }
-
 
 bool32_t lgdb_put_breakpoint_in_bin(
     struct lgdb_process_ctx *ctx,
@@ -163,7 +203,7 @@ void lgdb_set_breakpointp(
         uint8_t op_byte;
         BOOL success = (BOOL)lgdb_put_breakpoint_in_bin(
             ctx,
-            symbol->Address,
+            (void *)symbol->Address,
             &op_byte);
 
         breakpoint->original_asm_op = op_byte;
@@ -185,6 +225,35 @@ void lgdb_set_breakpointfl(
     const char *file_name,
     uint32_t line_number) {
     /* SymGetLineFromName */
+    IMAGEHLP_LINE64 line = s_make_line_info(ctx, file_name, line_number);
+
+    if (line.SizeOfStruct) {
+        /* Actually set the op-code byte and push it to the ud_breakpoints data structure */
+        lgdb_handle_t breakpoint_hdl = ctx->breakpoints.ud_breakpoint_count++;
+        lgdb_breakpoint_t *breakpoint = &ctx->breakpoints.ud_breakpoints[breakpoint_hdl];
+        lgdb_insert_in_tablep(&ctx->breakpoints.addr64_to_ud_idx, (void *)line.Address, breakpoint_hdl);
+
+        breakpoint->addr = line.Address;
+        breakpoint->file_name = NULL;
+
+        uint8_t op_byte;
+        BOOL success = (BOOL)lgdb_put_breakpoint_in_bin(
+            ctx,
+            (void *)line.Address,
+            &op_byte);
+
+        breakpoint->original_asm_op = op_byte;
+
+        if (success) {
+            printf(
+                "Setting breakpoint at on line %d of %s (%p), replaced 0x%.2X with 0x%.2X\n",
+                line.LineNumber,
+                line.FileName,
+                (void *)line.Address,
+                (uint32_t)op_byte,
+                (uint32_t)0xCC);
+        }
+    }
 }
 
 

@@ -21,6 +21,7 @@ int main() {
     /* Example of setting breakpoints (before the process began) */
     lgdb_add_breakpointp(debug_ctx, "main");
     lgdb_add_breakpointp(debug_ctx, "foo");
+    lgdb_add_breakpointfl(debug_ctx, "main.cpp", 28);
 
     /* Start the process that is going to be debugged */
     lgdb_begin_process(debug_ctx);

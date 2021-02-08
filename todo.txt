@@ -1,0 +1,4 @@
+- Add very basic CLI commands to get stuff going at least
+- Try various techniques for single stepping:
+    Settings int3 on every source line in a function (take chunk of memory of the function and flush the whole thing - there is a size member in the symbol info)
+    Analyse the dissassembly code for jumps etc...

@@ -7,9 +7,14 @@
 extern "C" {
 
 #include <lgdb_table.h>
+#include <lgdb_step.h>
 #include <lgdb_context.h>
 
 }
+
+
+/* VERY basic input parsing for the moment */
+static bool s_parse_input(lgdb_process_ctx_t *ctx);
 
 
 int main() {
@@ -20,7 +25,7 @@ int main() {
 
     /* Example of setting breakpoints (before the process began) */
     lgdb_add_breakpointp(debug_ctx, "main");
-    lgdb_add_breakpointp(debug_ctx, "foo");
+    // lgdb_add_breakpointp(debug_ctx, "foo");
     lgdb_add_breakpointfl(debug_ctx, "main.cpp", 28);
 
     /* Start the process that is going to be debugged */
@@ -33,16 +38,19 @@ int main() {
         bool got_event = lgdb_get_debug_event(debug_ctx, &ev);
 
         if (got_event) {
-            printf("GOT EVENTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT\n");
-            /* should_continue will be true if we need to  */
-            bool should_continue = true;
-            while (!should_continue) {
-
+            /* In cases where execution has been suspended, and input is needed */
+            if (debug_ctx->require_input) {
+                /* should_continue will be true if we need to  */
+                bool should_continue = false;
+                while (!should_continue) {
+                    should_continue = s_parse_input(debug_ctx);
+                }
+            }
+            else {
+                /* Make the process continue */
+                lgdb_continue_process(debug_ctx);
             }
         }
-
-        /* Make the process continue */
-        lgdb_continue_process(debug_ctx);
     }
 
     /* Close all process handles */
@@ -50,6 +58,34 @@ int main() {
 
     /* Deinitialise the debug ctx */
     lgdb_free_context(debug_ctx);
+
+    return 0;
+}
+
+
+static bool s_parse_input(lgdb_process_ctx_t *ctx) {
+    static char buffer[50] = { 0 };
+    int32_t ret = scanf("%s", buffer);
+
+    switch (buffer[0]) {
+    case 'n': {
+        lgdb_single_source_step(ctx);
+        return 1;
+    } break;
+
+    case 's': {
+
+    } break;
+
+    case 'f': {
+
+    } break;
+
+    case 'c': {
+        lgdb_continue_process(ctx);
+        return 1;
+    } break;
+    }
 
     return 0;
 }

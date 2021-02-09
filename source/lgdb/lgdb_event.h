@@ -2,6 +2,7 @@
 #define LGDB_EVENT_H
 
 #include <stdint.h>
+#include <lgdb_utility.h>
 
 /* Handle the system-level debug events (will most likely trigger user-level event) */
 void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx);
@@ -30,7 +31,7 @@ enum lgdb_user_event_type_t {
     /* Single step exception (may use this if stepping through dissassembly */
     LUET_SINGLE_ASM_STEP,
     /* Single C/C++ source code step finished */
-    LUET_SINGLE_SOURCE_CODE_STEP_FINISHED,
+    LUET_SOURCE_CODE_STEP_FINISHED,
     /* Step out of function finished */
     LUET_STEP_OUT_FUNCTION_FINISHED,
     /* Step into function finished */
@@ -49,12 +50,17 @@ typedef struct lgdb_user_event {
     single step exceptions, which the debugger knows how to handle itself etc...
     These events won't affect the user and don't have a lgdb_user_event_t associated with them.
 */
-void lgdb_trigger_user_event(struct lgdb_process_ctx *ctx, uint32_t ev_type, void *ev_data);
+void lgdb_trigger_user_event(struct lgdb_process_ctx *ctx, uint32_t ev_type, void *ev_data, bool32_t required_input);
 
 /* Data for each user event */
 typedef struct lgdb_user_event_valid_breakpoint_hit {
     uint32_t line_number;
     const char *file_name;
 } lgdb_user_event_valid_breakpoint_hit_t;
+
+typedef struct lgdb_user_event_source_code_step_finished {
+    uint32_t line_number;
+    const char *file_name;
+} lgdb_user_event_source_code_step_finished_t;
 
 #endif

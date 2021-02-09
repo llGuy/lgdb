@@ -25,7 +25,13 @@ void foo() {
 int main() {
     printf("Entering main function!\n");
 
+    if (global_variable < 9) {
+        printf("Haha\n");
+    }
+
     foo();
+
+    __debugbreak();
 
     foo();
 
@@ -34,7 +40,7 @@ int main() {
 
     OutputDebugString("Hello debugger0\n");
 
-    DebugBreak();
+    __debugbreak();
 
     return 0;
 }

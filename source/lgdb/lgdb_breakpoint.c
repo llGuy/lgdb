@@ -204,10 +204,8 @@ void lgdb_set_breakpointfl(
 }
 
 
-void lgdb_revert_to_original_byte(struct lgdb_process_ctx *ctx, lgdb_handle_t breakpoint_hdl) {
-    assert(breakpoint_hdl != LGDB_INVALID_HANDLE);
-
-    lgdb_breakpoint_t *breakpoint = &ctx->breakpoints.ud_breakpoints[breakpoint_hdl];
+void lgdb_revert_to_original_byte(struct lgdb_process_ctx *ctx, lgdb_breakpoint_t *breakpoint) {
+    assert(breakpoint);
 
     uint8_t original_op_byte = breakpoint->original_asm_op;
     size_t bytes_written;

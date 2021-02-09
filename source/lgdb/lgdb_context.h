@@ -43,6 +43,7 @@ typedef struct lgdb_process_ctx {
         struct {
             uint32_t is_running : 1;
             uint32_t triggered_user_event : 1;
+            uint32_t require_input : 1;
         };
     };
 } lgdb_process_ctx_t;

@@ -93,6 +93,8 @@ bool32_t lgdb_get_debug_event(lgdb_process_ctx_t *ctx, lgdb_user_event_t *dst) {
     BOOL success = WaitForDebugEvent(&ctx->current_event, INFINITE);
 
     if (success) {
+        lgdb_retrieve_thread_context(ctx);
+
         switch (ctx->current_event.dwDebugEventCode) {
 
         case EXCEPTION_DEBUG_EVENT: {
@@ -140,11 +142,9 @@ bool32_t lgdb_get_debug_event(lgdb_process_ctx_t *ctx, lgdb_user_event_t *dst) {
 
             dst->ev_data = ctx->current_user_event.ev_data;
             dst->ev_type = ctx->current_user_event.ev_type;
-            return 1;
         }
-        else {
-            return 0;
-        }
+
+        return 1;
     }
     else {
         return 0;
@@ -159,6 +159,8 @@ void lgdb_continue_process(lgdb_process_ctx_t *ctx) {
         ctx->current_event.dwProcessId,
         ctx->current_event.dwThreadId,
         DBG_CONTINUE);
+
+    ctx->require_input = 0;
 
     lgdb_lnclear(&ctx->lnmem);
 }

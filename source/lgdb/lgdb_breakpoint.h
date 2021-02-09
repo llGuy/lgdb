@@ -7,6 +7,12 @@
 #define LGDB_MAX_BREAKPOINTS 100
 #define LGDB_OP_INT3 0xCC
 
+typedef struct lgdb_source_location {
+    const char *file_name;
+    uint32_t line_number;
+    uint64_t addr;
+} lgdb_source_location_t;
+
 typedef struct lgdb_breakpoint {
     uint64_t addr;
     const char *file_name;
@@ -55,14 +61,21 @@ typedef struct lgdb_breakpoints {
     lgdb_table_t addr64_to_ud_idx;
 
     /* Invisible breakpoint (used for single stepping C/C++ code) */
-    lgdb_breakpoint_t iv_breakpoint_single_step;
+    lgdb_breakpoint_t jump_check_breakpoint;
+    lgdb_breakpoint_t single_step_breakpoint;
 
     lgdb_handle_t breakpoint_to_preserve;
 
     /* If it's 1, then the EXCEPTION_SINGLE_STEP will occur so that we can put the breakpoint back */
-    uint8_t preserve_breakpoint : 1;
+    uint32_t preserve_breakpoint : 1;
+    /* Will be set to one if single-step detects a jump instruction */
+    uint32_t is_checking_for_jump : 1;
+    uint32_t jump_instr_len : 5;
+    uint32_t expecting_single_step_for_jmp : 1;
+    /* When receiving a breakpoint, if this is 1, then act accordingly for src code step */
+    uint32_t is_single_src_code_step : 1;
     /* Will use later */
-    uint8_t other_flags : 7;
+    uint32_t other_flags : 23;
 } lgdb_breakpoints_t;
 
 /* 
@@ -74,7 +87,10 @@ void lgdb_add_breakpointfl(struct lgdb_process_ctx *ctx, const char *file_name, 
 
 /* Puts all the pending breakpoints in the binary */
 void lgdb_flush_pending_breakpoints(struct lgdb_process_ctx *ctx);
-/* Actually adds the 0xCC in the binary (addr64 is in the address space of the debugged process) */
+/* 
+    Actually adds the 0xCC in the binary (addr64 is in the address space of the debugged process) 
+    without adding any thing the address to breakpoint table.
+*/
 bool32_t lgdb_put_breakpoint_in_bin(struct lgdb_process_ctx *ctx, void *addr64, uint8_t *original);
 
 /* Set breakpoint with function name (the process needs to be running to use the lgdb_set_breakpoint* functions!) */
@@ -82,7 +98,7 @@ void lgdb_set_breakpointp(struct lgdb_process_ctx *ctx, const char *function_nam
 /* Set breakpoint with file name and line number */
 void lgdb_set_breakpointfl(struct lgdb_process_ctx *ctx, const char *file_name, uint32_t line_number);
 
-void lgdb_revert_to_original_byte(struct lgdb_process_ctx *ctx, lgdb_handle_t breakpoint_hdl);
+void lgdb_revert_to_original_byte(struct lgdb_process_ctx *ctx, lgdb_breakpoint_t *breakpoint);
 /* Sets preserve_breakpoint to 1, and sets the trap flag to 1 */
 void lgdb_preserve_breakpoint(struct lgdb_process_ctx *ctx, lgdb_handle_t breakpoint_hdl);
 

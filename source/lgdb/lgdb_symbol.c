@@ -72,3 +72,9 @@ IMAGEHLP_LINE64 lgdb_make_line_info_from_addr(struct lgdb_process_ctx *ctx, void
 
     return line;
 }
+
+
+IMAGEHLP_LINE64 lgdb_get_next_line_info(struct lgdb_process_ctx *ctx, IMAGEHLP_LINE64 line) {
+    WIN32_CALL(SymGetLineNext64, ctx->proc_info.hProcess, &line);
+    return line;
+}

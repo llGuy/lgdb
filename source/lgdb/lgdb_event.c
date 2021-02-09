@@ -2,6 +2,7 @@
 #include <DbgHelp.h>
 #include <stdio.h>
 #include <assert.h>
+#include "lgdb_step.h"
 #include "lgdb_event.h"
 #include "lgdb_symbol.h"
 #include "lgdb_utility.h"
@@ -72,7 +73,8 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
                 ctx->breakpoints.is_single_src_code_step = 0;
             }
             /* TODO: If we hit breakpoint for single step */
-            else if (ctx->breakpoints.is_single_src_code_step) {
+            else if (ctx->breakpoints.is_single_src_code_step &&
+                ctx->breakpoints.single_step_breakpoint.addr == ctx->thread_ctx.Rip - 1) {
                 lgdb_revert_to_original_byte(ctx, &ctx->breakpoints.single_step_breakpoint);
                 --ctx->thread_ctx.Rip;
                 lgdb_sync_process_thread_context(ctx);
@@ -131,23 +133,29 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
                 /* Sure to have made a jump */
                 IMAGEHLP_LINE64 line_info = lgdb_make_line_info_from_addr(ctx, (void *)ctx->thread_ctx.Rip);
                 if (line_info.SizeOfStruct) {
-                    lgdb_user_event_source_code_step_finished_t *luescsf_data =
-                        LGDB_LNMALLOC(&ctx->lnmem, lgdb_user_event_source_code_step_finished_t, 1);
-                    luescsf_data->file_name = line_info.FileName;
-                    luescsf_data->line_number = line_info.LineNumber;
-                    lgdb_trigger_user_event(ctx, LUET_SOURCE_CODE_STEP_FINISHED, luescsf_data, 1);
+                    /* Undo the invisible breakpoint that was set for next line instruction */
+                    if (ctx->breakpoints.single_step_breakpoint.addr)
+                        lgdb_revert_to_original_byte(ctx, &ctx->breakpoints.single_step_breakpoint);
+                    lgdb_sync_process_thread_context(ctx);
+
+                    ctx->breakpoints.is_single_src_code_step = 0;
+                    ctx->breakpoints.expecting_single_step_for_jmp = 0;
+
+                    if (line_info.LineNumber == ctx->breakpoints.previous_line) {
+                        lgdb_single_source_step(ctx);
+                    }
+                    else {
+                        lgdb_user_event_source_code_step_finished_t *luescsf_data =
+                            LGDB_LNMALLOC(&ctx->lnmem, lgdb_user_event_source_code_step_finished_t, 1);
+                        luescsf_data->file_name = line_info.FileName;
+                        luescsf_data->line_number = line_info.LineNumber;
+                        lgdb_trigger_user_event(ctx, LUET_SOURCE_CODE_STEP_FINISHED, luescsf_data, 1);
+                    }
                 }
-
-                ctx->breakpoints.is_single_src_code_step = 0;
-                ctx->breakpoints.expecting_single_step_for_jmp = 0;
-
-                /* Undo the invisible breakpoint that was set for next line instruction */
-                if (ctx->breakpoints.single_step_breakpoint.addr)
-                    lgdb_revert_to_original_byte(ctx, &ctx->breakpoints.single_step_breakpoint);
-                lgdb_sync_process_thread_context(ctx);
             }
             else {
                 /* Made no jump - can continue, will hit the breakpoint of the next source line */
+                ctx->breakpoints.expecting_single_step_for_jmp = 0;
             }
         }
     } break;

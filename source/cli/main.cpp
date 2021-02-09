@@ -64,12 +64,19 @@ int main() {
 
 
 static bool s_parse_input(lgdb_process_ctx_t *ctx) {
+#if 0
+    lgdb_single_source_step(ctx);
+    lgdb_continue_process(ctx);
+    return 1;
+#endif
+
     static char buffer[50] = { 0 };
     int32_t ret = scanf("%s", buffer);
 
     switch (buffer[0]) {
     case 'n': {
         lgdb_single_source_step(ctx);
+        lgdb_continue_process(ctx);
         return 1;
     } break;
 

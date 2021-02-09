@@ -66,18 +66,24 @@ void lgdb_update_call_stack(struct lgdb_process_ctx *ctx) {
             &line);
 
         if (success) {
+#if 0
             printf("\t(%s:%p) %s (%s:%d)\n",
                 module.ImageName,
                 (void *)stack.AddrPC.Offset,
                 symbol->Name,
                 line.FileName,
                 line.LineNumber);
+#endif
+            printf("\t-> %s:%d (%p)\n", symbol->Name, line.LineNumber, (void *)copy.Rip);
         }
         else {
+            printf("\t-> %s\n", symbol->Name);
+#if 0
             printf("\t(%s:%p) %s\n", 
                 module.ImageName,
                 (void *)stack.AddrPC.Offset,
                 symbol->Name);
+#endif
         }
 
     } while (stack.AddrReturn.Offset != 0);

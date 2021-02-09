@@ -63,6 +63,7 @@ typedef struct lgdb_breakpoints {
     /* Invisible breakpoint (used for single stepping C/C++ code) */
     lgdb_breakpoint_t jump_check_breakpoint;
     lgdb_breakpoint_t single_step_breakpoint;
+    uint32_t previous_line; // From the single step instruction
 
     lgdb_handle_t breakpoint_to_preserve;
 

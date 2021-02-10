@@ -63,6 +63,7 @@ typedef struct lgdb_breakpoints {
     /* Invisible breakpoint (used for single stepping C/C++ code) */
     lgdb_breakpoint_t single_step_breakpoint;
     uint32_t previous_line; // From the single step instruction
+    uint64_t call_end_address;
 
     lgdb_handle_t breakpoint_to_preserve;
 
@@ -70,9 +71,11 @@ typedef struct lgdb_breakpoints {
     uint32_t preserve_breakpoint : 1;
     /* Will be set to one if single-step detects a jump instruction */
     uint32_t is_checking_for_jump : 1;
+    uint32_t is_checking_for_call : 1;
+    uint32_t going_through_reloc : 1;
     uint32_t jump_instr_len : 5;
     /* Will use later */
-    uint32_t other_flags : 25;
+    uint32_t other_flags : 24;
 } lgdb_breakpoints_t;
 
 /* 

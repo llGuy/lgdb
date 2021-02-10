@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "lgdb_step.h"
 #include "lgdb_symbol.h"
 #include "lgdb_context.h"
@@ -8,9 +9,8 @@ void lgdb_single_asm_step(struct lgdb_process_ctx *ctx) {
 }
 
 
-/* TODO: Optimise and clean */
-void lgdb_single_source_step(struct lgdb_process_ctx *ctx) {
-    /* Not trivial : need to check for conditional jumps */
+/* If check_for_call is set to true, then treat the call instruction just like a jump */
+static s_prepare_step(struct lgdb_process_ctx *ctx, bool32_t check_for_call) {
     IMAGEHLP_LINE64 current_line = lgdb_make_line_info_from_addr(ctx, (void *)ctx->thread_ctx.Rip);
     IMAGEHLP_LINE64 next_line = lgdb_get_next_line_info(ctx, current_line);
 
@@ -19,7 +19,7 @@ void lgdb_single_source_step(struct lgdb_process_ctx *ctx) {
 
         size_t bytes_read;
 
-        uint32_t line_size = next_line.Address - ctx->thread_ctx.Rip;
+        uint64_t line_size = next_line.Address - ctx->thread_ctx.Rip;
 
         uint8_t *instr_buf = LGDB_LNMALLOC(&ctx->lnmem, uint8_t, line_size);
         WIN32_CALL(ReadProcessMemory, ctx->proc_info.hProcess, (void *)ctx->thread_ctx.Rip, instr_buf, line_size, &bytes_read);
@@ -41,7 +41,7 @@ void lgdb_single_source_step(struct lgdb_process_ctx *ctx) {
 
         /* Check for jump / ret instruction */
         lgdb_machine_instruction_t instr;
-        uint32_t offset = 0;
+        uint64_t offset = 0;
 
         struct {
             uint8_t stop : 1;
@@ -51,10 +51,12 @@ void lgdb_single_source_step(struct lgdb_process_ctx *ctx) {
         flags.stop = 0;
         flags.next_line_is_break = 0;
         ctx->breakpoints.is_checking_for_jump = 0;
+        ctx->breakpoints.is_checking_for_call = 0;
+        ctx->breakpoints.going_through_reloc = 0;
 
         while (!flags.stop && lgdb_decode_instruction_at(
             &ctx->dissasm,
-            instr_buf + offset,
+            instr_buf + (uint32_t)offset,
             line_size - offset,
             &instr)) {
             switch (instr.mnemonic) {
@@ -65,27 +67,44 @@ void lgdb_single_source_step(struct lgdb_process_ctx *ctx) {
             case ZYDIS_MNEMONIC_JNLE:  case ZYDIS_MNEMONIC_JNO:   case ZYDIS_MNEMONIC_JNP:
             case ZYDIS_MNEMONIC_JNS:   case ZYDIS_MNEMONIC_JNZ:   case ZYDIS_MNEMONIC_JO:
             case ZYDIS_MNEMONIC_JP:    case ZYDIS_MNEMONIC_JRCXZ: case ZYDIS_MNEMONIC_JS:
-            case ZYDIS_MNEMONIC_JZ: {
+            case ZYDIS_MNEMONIC_JZ:    case ZYDIS_MNEMONIC_RET: {
                 /* Put a breakpoint at this instruction */
                 ctx->breakpoints.is_checking_for_jump = 1;
 
                 uint64_t jump_addr = ctx->thread_ctx.Rip + offset;
                 uint8_t original_op;
                 lgdb_put_breakpoint_in_bin(ctx, (void *)(jump_addr), &original_op);
-                ctx->breakpoints.single_step_breakpoint.addr = (void *)jump_addr;
+                ctx->breakpoints.single_step_breakpoint.addr = jump_addr;
                 ctx->breakpoints.single_step_breakpoint.original_asm_op = original_op;
                 ctx->breakpoints.jump_instr_len = instr.length;
-
-                printf("Setting jump check breakpoint at %p\n", (void *)jump_addr);
 
                 flags.stop = 1;
             } break;
 
             case ZYDIS_MNEMONIC_INT3: {
-                printf("Gonna hit debug instruction\n");
+                // printf("Gonna hit debug instruction\n");
 
                 flags.next_line_is_break = 1;
                 flags.stop = 1;
+            } break;
+
+            case ZYDIS_MNEMONIC_CALL: {
+                if (check_for_call) {
+                    /* Put a breakpoint at this instruction */
+                    ctx->breakpoints.is_checking_for_jump = 1;
+                    ctx->breakpoints.is_checking_for_call = 1;
+
+                    uint64_t jump_addr = ctx->thread_ctx.Rip + offset;
+                    uint8_t original_op;
+                    lgdb_put_breakpoint_in_bin(ctx, (void *)(jump_addr), &original_op);
+                    ctx->breakpoints.single_step_breakpoint.addr = jump_addr;
+                    ctx->breakpoints.single_step_breakpoint.original_asm_op = original_op;
+                    ctx->breakpoints.jump_instr_len = instr.length;
+
+                    ctx->breakpoints.call_end_address = jump_addr + instr.length;
+
+                    flags.stop = 1;
+                }
             } break;
 
             default: {
@@ -109,79 +128,39 @@ void lgdb_single_source_step(struct lgdb_process_ctx *ctx) {
                 lgdb_put_breakpoint_in_bin(ctx, (void *)next_line.Address, &original_op);
                 ctx->breakpoints.single_step_breakpoint.addr = next_line.Address;
                 ctx->breakpoints.single_step_breakpoint.original_asm_op = original_op;
-
-                printf("Setting single step breakpoint at %p\n", next_line.Address);
             }
         }
     }
     else {
         printf("Missing line information!\n");
     }
+}
+
+
+/* TODO: Optimise and clean */
+void lgdb_single_source_step(struct lgdb_process_ctx *ctx) {
+    s_prepare_step(ctx, 0);
 }
 
 
 void lgdb_step_into(struct lgdb_process_ctx *ctx) {
-    IMAGEHLP_LINE64 current_line = lgdb_make_line_info_from_addr(ctx, (void *)ctx->thread_ctx.Rip);
-    IMAGEHLP_LINE64 next_line = lgdb_get_next_line_info(ctx, current_line);
-
-    if (current_line.SizeOfStruct && next_line.SizeOfStruct) {
-        size_t bytes_read;
-        uint32_t line_size = next_line.Address - current_line.Address;
-
-        uint8_t *instr_buf = LGDB_LNMALLOC(&ctx->lnmem, uint8_t, line_size);
-
-        WIN32_CALL(
-            ReadProcessMemory,
-            ctx->proc_info.hProcess,
-            (void *)current_line.Address,
-            instr_buf,
-            line_size,
-            &bytes_read);
-
-        lgdb_machine_instruction_t instr;
-        uint32_t offset = instr_buf[0] == 0xCC ? 1 : 0;
-        bool32_t stop = 0;
-        bool32_t next_line_is_break = 0;
-
-        while (!stop && lgdb_decode_instruction_at(
-            &ctx->dissasm,
-            instr_buf + offset,
-            line_size - offset,
-            &instr)) {
-            switch (instr.mnemonic) {
-            case ZYDIS_MNEMONIC_CALL: {
-
-            } break;
-
-            case ZYDIS_MNEMONIC_INT3: {
-                assert(0);
-                printf("Gonna hit debug instruction\n");
-
-                next_line_is_break = 1;
-            } break;
-
-            default: {
-
-            } break;
-            }
-
-            offset += instr.length;
-        }
-
-        lgdb_continue_process(ctx);
-    }
-    else {
-        printf("Missing line information!\n");
-    }
+    s_prepare_step(ctx, 1);
 }
 
 
 void lgdb_clear_step_info(struct lgdb_process_ctx *ctx) {
-    if (ctx->breakpoints.single_step_breakpoint.addr != (void *)ctx->thread_ctx.Rip &&
+    if (ctx->breakpoints.single_step_breakpoint.addr != ctx->thread_ctx.Rip &&
         ctx->breakpoints.single_step_breakpoint.addr) {
         lgdb_revert_to_original_byte(ctx, &ctx->breakpoints.single_step_breakpoint);
     }
 
     ctx->breakpoints.is_checking_for_jump = 0;
-    ctx->breakpoints.single_step_breakpoint.addr = NULL;
+    ctx->breakpoints.is_checking_for_call = 0;
+    ctx->breakpoints.going_through_reloc = 0;
+    ctx->breakpoints.single_step_breakpoint.addr = 0;
+}
+
+
+void lgdb_step_out(struct lgdb_process_ctx *ctx) {
+
 }

@@ -21,7 +21,7 @@ const char *lgdb_concat_cstr(const char *a, const char *b) {
 
 void lgdb_print_win32_error(const char *win32_function) {
     unsigned int last_error = GetLastError();
-    printf("Call to \"%s\" failed with error %zu: ", win32_function, last_error);
+    printf("Call to \"%s\" failed with error %u: ", win32_function, last_error);
     char buf[256] = { 0 };
     FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
         NULL, last_error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),

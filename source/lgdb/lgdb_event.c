@@ -32,10 +32,7 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
             &ctx->breakpoints.addr64_to_ud_idx,
             (void *)(ctx->thread_ctx.Rip));
 
-        if (breakpoint_hdl) {
-            lgdb_handle_user_breakpoint(ctx, *breakpoint_hdl);
-        }
-        else if (ctx->breakpoints.single_step_breakpoint.addr == ctx->thread_ctx.Rip) {
+        if (ctx->breakpoints.single_step_breakpoint.addr == ctx->thread_ctx.Rip) {
             if (ctx->breakpoints.is_checking_for_jump) {
                 /* The single step breakpoint was set to check for a jump */
                 lgdb_revert_to_original_byte(ctx, &ctx->breakpoints.single_step_breakpoint);
@@ -57,8 +54,11 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
                     lgdb_trigger_user_event(ctx, LUET_SOURCE_CODE_STEP_FINISHED, luescsf_data, 1);
                 }
 
-                ctx->breakpoints.single_step_breakpoint.addr = NULL;
+                ctx->breakpoints.single_step_breakpoint.addr = 0;
             }
+        }
+        else if (breakpoint_hdl) {
+            lgdb_handle_user_breakpoint(ctx, *breakpoint_hdl);
         }
         else {
             lgdb_handle_inline_breakpoint(ctx);
@@ -86,14 +86,13 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
 
             ctx->breakpoints.preserve_breakpoint = 0;
         }
-        else if (ctx->breakpoints.is_checking_for_jump) {
-            if (ctx->thread_ctx.Rip - ctx->breakpoints.single_step_breakpoint.addr != ctx->breakpoints.jump_instr_len) {
-                printf("Made jump in single step instruction!\n");
 
+        if (ctx->breakpoints.is_checking_for_jump) {
+            if (ctx->thread_ctx.Rip - ctx->breakpoints.single_step_breakpoint.addr != ctx->breakpoints.jump_instr_len) {
                 /* Sure to have made a jump */
                 IMAGEHLP_LINE64 line_info = lgdb_make_line_info_from_addr(ctx, (void *)ctx->thread_ctx.Rip);
                 if (line_info.SizeOfStruct) {
-                    ctx->breakpoints.single_step_breakpoint.addr = NULL;
+                    ctx->breakpoints.single_step_breakpoint.addr = 0;
                     ctx->breakpoints.is_checking_for_jump = 0;
 
                     if (line_info.LineNumber == ctx->breakpoints.previous_line) {
@@ -129,12 +128,39 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
                         else {
                             lgdb_print_current_location(ctx);
 
-                            lgdb_user_event_source_code_step_finished_t *luescsf_data =
-                                LGDB_LNMALLOC(&ctx->lnmem, lgdb_user_event_source_code_step_finished_t, 1);
-                            luescsf_data->file_name = line_info.FileName;
-                            luescsf_data->line_number = line_info.LineNumber;
-                            lgdb_trigger_user_event(ctx, LUET_SOURCE_CODE_STEP_FINISHED, luescsf_data, 1);
+                            if (ctx->breakpoints.is_checking_for_call) {
+                                lgdb_user_event_step_in_finished_t *luesif_data =
+                                    LGDB_LNMALLOC(&ctx->lnmem, lgdb_user_event_step_in_finished_t, 1);
+                                luesif_data->file_name = line_info.FileName;
+                                luesif_data->line_number = line_info.LineNumber;
+                                lgdb_trigger_user_event(ctx, LUET_STEP_IN_FUNCTION_FINISHED, luesif_data, 1);
+
+                                ctx->breakpoints.is_checking_for_call = 0;
+                            }
+                            else {
+                                lgdb_user_event_source_code_step_finished_t *luescsf_data =
+                                    LGDB_LNMALLOC(&ctx->lnmem, lgdb_user_event_source_code_step_finished_t, 1);
+                                luescsf_data->file_name = line_info.FileName;
+                                luescsf_data->line_number = line_info.LineNumber;
+                                lgdb_trigger_user_event(ctx, LUET_SOURCE_CODE_STEP_FINISHED, luescsf_data, 1);
+                            }
                         }
+                    }
+                }
+                else if (ctx->breakpoints.is_checking_for_call) {
+                    if (ctx->breakpoints.going_through_reloc) {
+                        ctx->breakpoints.going_through_reloc = 0;
+
+                        /* Put breakpoint after the original call instruction if this is a function for which there are no debug info */
+                        uint8_t original_op;
+                        lgdb_put_breakpoint_in_bin(ctx, (void *)ctx->breakpoints.call_end_address, &original_op);
+                        ctx->breakpoints.single_step_breakpoint.addr = ctx->breakpoints.call_end_address;
+                        ctx->breakpoints.single_step_breakpoint.original_asm_op = original_op;
+                    }
+                    else {
+                        ctx->breakpoints.going_through_reloc = 1;
+                        ctx->thread_ctx.EFlags |= (1 << 8);
+                        lgdb_sync_process_thread_context(ctx);
                     }
                 }
             }
@@ -205,6 +231,9 @@ void lgdb_handle_create_process_debug_event(struct lgdb_process_ctx *ctx) {
     else {
         printf("Loaded \'%s\', symbols WERE NOT loaded\n", ctx->exe_path);
     }
+
+    IMAGEHLP_SYMBOL64 *symbol = lgdb_make_symbol_info(ctx, "foo");
+    printf("foo is at %p\n", symbol->Address);
 }
 
 

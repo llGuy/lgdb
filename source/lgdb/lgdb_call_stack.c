@@ -100,7 +100,7 @@ void lgdb_print_current_location(struct lgdb_process_ctx *ctx) {
     BOOL success = WIN32_CALL(
         SymGetLineFromAddr64,
         ctx->proc_info.hProcess,
-        (void *)ctx->thread_ctx.Rip,
+        ctx->thread_ctx.Rip,
         &dw_displacement,
         &line);
 
@@ -111,4 +111,9 @@ void lgdb_print_current_location(struct lgdb_process_ctx *ctx) {
 /* If we know that we are stepping into a function, just push, instead of walking up the stack */
 void lgdb_push_to_call_stack(struct lgdb_process_ctx *ctx) {
     /* TODO */
+}
+
+
+uint64_t lgdb_get_return_address(struct lgdb_process_ctx *ctx) {
+
 }

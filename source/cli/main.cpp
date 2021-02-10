@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <chrono>
 
 #include <Windows.h>
 #include <DbgHelp.h>
@@ -9,12 +10,18 @@ extern "C" {
 #include <lgdb_table.h>
 #include <lgdb_step.h>
 #include <lgdb_context.h>
+#include <lgdb_symbol.h>
 
 }
 
 
 /* VERY basic input parsing for the moment */
 static bool s_parse_input(lgdb_process_ctx_t *ctx);
+
+
+using time_stamp_t = std::chrono::high_resolution_clock::time_point;
+static time_stamp_t s_get_current_time();
+static float s_get_time_difference(time_stamp_t end, time_stamp_t start);
 
 
 int main() {
@@ -31,6 +38,8 @@ int main() {
     /* Start the process that is going to be debugged */
     lgdb_begin_process(debug_ctx);
 
+    time_stamp_t now = s_get_current_time();
+
     /* Debugger loop */
     while (debug_ctx->is_running) {
         /* Poll all debug events and handle accordingly with callbacks */
@@ -43,7 +52,12 @@ int main() {
                 /* should_continue will be true if we need to  */
                 bool should_continue = false;
                 while (!should_continue) {
+                    float dt = s_get_time_difference(s_get_current_time(), now);
+                    printf("%f ms elapsed\n", (dt * 1000.0f));
+
                     should_continue = s_parse_input(debug_ctx);
+
+                    now = s_get_current_time();
                 }
             }
             else {
@@ -65,6 +79,7 @@ int main() {
 
 static bool s_parse_input(lgdb_process_ctx_t *ctx) {
     static char buffer[50] = { 0 };
+    printf("(lgdb) ");
     int32_t ret = scanf("%s", buffer);
 
     switch (buffer[0]) {
@@ -75,11 +90,17 @@ static bool s_parse_input(lgdb_process_ctx_t *ctx) {
     } break;
 
     case 's': {
-
+        lgdb_step_into(ctx);
+        lgdb_continue_process(ctx);
+        return 1;
     } break;
 
     case 'f': {
         
+    } break;
+
+    case 't': {
+        lgdb_update_call_stack(ctx);
     } break;
 
     case 'c': {
@@ -95,4 +116,16 @@ static bool s_parse_input(lgdb_process_ctx_t *ctx) {
     }
 
     return 0;
+}
+
+
+static time_stamp_t s_get_current_time() {
+    return std::chrono::high_resolution_clock::now();
+}
+
+
+static float s_get_time_difference(time_stamp_t end, time_stamp_t start) {
+    std::chrono::duration<float> seconds = end - start;
+    float delta = seconds.count();
+    return (float)delta;
 }

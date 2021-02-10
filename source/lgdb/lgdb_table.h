@@ -33,9 +33,9 @@ bool32_t lgdb_insert_in_table(lgdb_table_t *table, uint32_t raw_key, lgdb_entry_
 bool32_t lgdb_insert_in_tables(lgdb_table_t *table, const char *str, lgdb_entry_value_t value);
 bool32_t lgdb_insert_in_tablep(lgdb_table_t *table, void *p, lgdb_entry_value_t value);
 /* NULL is returned if no value was found */
-lgdb_entry_value_t *lgdb_get_from_table(const lgdb_table_t *table, uint32_t raw_key);
-lgdb_entry_value_t *lgdb_get_from_tables(const lgdb_table_t *table, const char *str);
-lgdb_entry_value_t *lgdb_get_from_tablep(const lgdb_table_t *table, void *p);
+lgdb_entry_value_t *lgdb_get_from_table(lgdb_table_t *table, uint32_t raw_key);
+lgdb_entry_value_t *lgdb_get_from_tables(lgdb_table_t *table, const char *str);
+lgdb_entry_value_t *lgdb_get_from_tablep(lgdb_table_t *table, void *p);
 bool32_t lgdb_remove_from_table(lgdb_table_t *table, uint32_t raw_key);
 bool32_t lgdb_remove_from_tables(lgdb_table_t *table, const char *str);
 bool32_t lgdb_remove_from_tablep(lgdb_table_t *table, void *p);

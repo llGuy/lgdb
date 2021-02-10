@@ -63,4 +63,9 @@ typedef struct lgdb_user_event_source_code_step_finished {
     const char *file_name;
 } lgdb_user_event_source_code_step_finished_t;
 
+typedef struct lgdb_user_event_step_in_finished {
+    uint32_t line_number;
+    const char *file_name;
+} lgdb_user_event_step_in_finished_t;
+
 #endif

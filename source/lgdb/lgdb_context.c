@@ -18,7 +18,7 @@ lgdb_process_ctx_t *lgdb_create_context(const char *directory, const char *exe_n
     ctx->exe_name = exe_name;
     ctx->breakpoints.addr64_to_ud_idx = lgdb_create_table(LGDB_MAX_BREAKPOINTS, LGDB_MAX_BREAKPOINTS);
     ctx->call_stack.frame_count = 0;
-    ctx->lnmem = lgdb_create_linear_allocator(lgdb_kilobytes(300));
+    ctx->lnmem = lgdb_create_linear_allocator((uint32_t)lgdb_kilobytes(300));
 
     ZydisDecoderInit(&ctx->dissasm.decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_ADDRESS_WIDTH_64);
     ZydisFormatterInit(&ctx->dissasm.formatter, ZYDIS_FORMATTER_STYLE_INTEL);
@@ -29,7 +29,7 @@ lgdb_process_ctx_t *lgdb_create_context(const char *directory, const char *exe_n
 
 void lgdb_free_context(lgdb_process_ctx_t *ctx) {
     /* TODO: Make sure to free all the things inside ctx */
-    free(ctx->exe_path);
+    free((char *)ctx->exe_path);
     free(ctx);
 }
 
@@ -42,7 +42,7 @@ bool32_t lgdb_begin_process(lgdb_process_ctx_t *ctx) {
         .cb = sizeof(STARTUPINFO),
         .lpReserved = NULL,
         .lpDesktop = NULL,
-        .lpTitle = ctx->exe_name,
+        .lpTitle = (char *)ctx->exe_name,
         .dwX = 0, // Perhaps do something by taking the display rect
         .dwY = 0,
         .dwXSize = 0,
@@ -80,8 +80,8 @@ bool32_t lgdb_begin_process(lgdb_process_ctx_t *ctx) {
 
 
 bool32_t lgdb_terminate_process(lgdb_process_ctx_t *ctx) {
-    uint32_t exit;
-    return WIN32_CALL(TerminateProcess, ctx->proc_info.hProcess, &exit);
+    UINT exit = 0;
+    return WIN32_CALL(TerminateProcess, ctx->proc_info.hProcess, exit);
 }
 
 
@@ -177,9 +177,7 @@ void lgdb_continue_process(lgdb_process_ctx_t *ctx) {
             &ctx->breakpoints.addr64_to_ud_idx,
             (void *)(ctx->thread_ctx.Rip));
 
-        assert(!breakpoint_hdl);
-
-        if (ctx->thread_ctx.Rip != ctx->breakpoints.single_step_breakpoint.addr) {
+        if (!breakpoint_hdl && ctx->thread_ctx.Rip != ctx->breakpoints.single_step_breakpoint.addr) {
             ++ctx->thread_ctx.Rip;
             lgdb_sync_process_thread_context(ctx);
         }

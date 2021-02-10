@@ -21,6 +21,6 @@ inline uint64_t lgdb_megabytes(uint32_t mb) {
     return lgdb_kilobytes(mb * 1024);
 }
 
-#define LGDB_LNMALLOC(ptr_allocator, type, count) (type *)lgdb_lnmalloc(ptr_allocator, sizeof(type) * count)
+#define LGDB_LNMALLOC(ptr_allocator, type, count) (type *)lgdb_lnmalloc(ptr_allocator, (uint32_t)(sizeof(type) * count))
 
 #endif

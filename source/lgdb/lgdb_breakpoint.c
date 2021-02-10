@@ -13,7 +13,7 @@ static lgdb_handle_t s_prepare_new_breakpoint(struct lgdb_process_ctx *ctx) {
     lgdb_handle_t breakpoint_hdl = ctx->breakpoints.ud_breakpoint_count++;
     lgdb_breakpoint_t *breakpoint = &ctx->breakpoints.ud_breakpoints[breakpoint_hdl];
 
-    breakpoint->addr = NULL;
+    breakpoint->addr = 0;
     /* TODO: Add this information */
     breakpoint->file_name = NULL;
     breakpoint->line_number = 0;
@@ -68,7 +68,7 @@ void lgdb_flush_pending_breakpoints(struct lgdb_process_ctx *ctx) {
         } break;
 
         default: {
-            printf("Used unrecognised function to add breakpoint\n");
+            // printf("Used unrecognised function to add breakpoint\n");
             assert(0);
         } break;
 

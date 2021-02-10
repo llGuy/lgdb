@@ -73,9 +73,10 @@ typedef struct lgdb_breakpoints {
     uint32_t is_checking_for_jump : 1;
     uint32_t is_checking_for_call : 1;
     uint32_t going_through_reloc : 1;
+    uint32_t set_jump_eflags : 1;
     uint32_t jump_instr_len : 5;
     /* Will use later */
-    uint32_t other_flags : 24;
+    uint32_t other_flags : 23;
 } lgdb_breakpoints_t;
 
 /* 

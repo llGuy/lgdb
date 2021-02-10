@@ -53,6 +53,7 @@ static s_prepare_step(struct lgdb_process_ctx *ctx, bool32_t check_for_call) {
         ctx->breakpoints.is_checking_for_jump = 0;
         ctx->breakpoints.is_checking_for_call = 0;
         ctx->breakpoints.going_through_reloc = 0;
+        ctx->breakpoints.set_jump_eflags = 0;
 
         while (!flags.stop && lgdb_decode_instruction_at(
             &ctx->dissasm,
@@ -158,6 +159,7 @@ void lgdb_clear_step_info(struct lgdb_process_ctx *ctx) {
     ctx->breakpoints.is_checking_for_call = 0;
     ctx->breakpoints.going_through_reloc = 0;
     ctx->breakpoints.single_step_breakpoint.addr = 0;
+    ctx->breakpoints.set_jump_eflags = 0;
 }
 
 

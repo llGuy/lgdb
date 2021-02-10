@@ -38,6 +38,7 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
                 lgdb_revert_to_original_byte(ctx, &ctx->breakpoints.single_step_breakpoint);
 
                 ctx->thread_ctx.EFlags |= (1 << 8);
+                ctx->breakpoints.set_jump_eflags = 1;
             }
             else {
                 /* The single step breakpoint was just a regular single step breakpoint */
@@ -87,7 +88,7 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
             ctx->breakpoints.preserve_breakpoint = 0;
         }
 
-        if (ctx->breakpoints.is_checking_for_jump) {
+        if (ctx->breakpoints.is_checking_for_jump && ctx->breakpoints.set_jump_eflags) {
             if (ctx->thread_ctx.Rip - ctx->breakpoints.single_step_breakpoint.addr != ctx->breakpoints.jump_instr_len) {
                 /* Sure to have made a jump */
                 IMAGEHLP_LINE64 line_info = lgdb_make_line_info_from_addr(ctx, (void *)ctx->thread_ctx.Rip);

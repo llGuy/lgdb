@@ -51,6 +51,7 @@ typedef struct lgdb_process_ctx {
 lgdb_process_ctx_t *lgdb_create_context(const char *directory, const char *exe_name);
 void lgdb_free_context(lgdb_process_ctx_t *ctx);
 bool32_t lgdb_begin_process(lgdb_process_ctx_t *ctx);
+bool32_t lgdb_terminate_process(lgdb_process_ctx_t *ctx);
 void lgdb_close_process(lgdb_process_ctx_t *ctx);
 bool32_t lgdb_get_debug_event(lgdb_process_ctx_t *ctx, lgdb_user_event_t *dst);
 /* Also does things like flushing all pending breakpoints */

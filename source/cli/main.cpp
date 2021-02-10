@@ -26,7 +26,7 @@ int main() {
     /* Example of setting breakpoints (before the process began) */
     lgdb_add_breakpointp(debug_ctx, "main");
     // lgdb_add_breakpointp(debug_ctx, "foo");
-    lgdb_add_breakpointfl(debug_ctx, "main.cpp", 28);
+    lgdb_add_breakpointfl(debug_ctx, "main.cpp", 46);
 
     /* Start the process that is going to be debugged */
     lgdb_begin_process(debug_ctx);
@@ -64,12 +64,6 @@ int main() {
 
 
 static bool s_parse_input(lgdb_process_ctx_t *ctx) {
-#if 0
-    lgdb_single_source_step(ctx);
-    lgdb_continue_process(ctx);
-    return 1;
-#endif
-
     static char buffer[50] = { 0 };
     int32_t ret = scanf("%s", buffer);
 
@@ -85,13 +79,19 @@ static bool s_parse_input(lgdb_process_ctx_t *ctx) {
     } break;
 
     case 'f': {
-
+        
     } break;
 
     case 'c': {
         lgdb_continue_process(ctx);
         return 1;
     } break;
+
+    case 'q': {
+        lgdb_terminate_process(ctx);
+        return 0;
+    } break;
+
     }
 
     return 0;

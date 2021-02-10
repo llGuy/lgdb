@@ -13,6 +13,7 @@ typedef struct lgdb_call_stack {
 } lgdb_call_stack_t;
 
 void lgdb_update_call_stack(struct lgdb_process_ctx *ctx);
+void lgdb_print_current_location(struct lgdb_process_ctx *ctx);
 /* If we know that we are stepping into a function, just push, instead of walking up the stack */
 void lgdb_push_to_call_stack(struct lgdb_process_ctx *ctx);
 

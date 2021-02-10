@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 
+#include "lgdb_step.h"
 #include "lgdb_table.h"
 #include "lgdb_symbol.h"
 #include "lgdb_utility.h"
@@ -232,4 +233,49 @@ void lgdb_preserve_breakpoint(struct lgdb_process_ctx *ctx, lgdb_handle_t breakp
 
     /* Flag 8 corresponds to the trap flag which will trigger EXCEPTION_SINGLE_STEP */
     ctx->thread_ctx.EFlags |= (1 << 8);
+}
+
+
+void lgdb_handle_user_breakpoint(struct lgdb_process_ctx *ctx, lgdb_handle_t breakpoint_hdl) {
+    printf("BREAKPOINT at user-defined breakpoint:\n");
+    lgdb_print_current_location(ctx);
+
+    lgdb_breakpoint_t *breakpoint = &ctx->breakpoints.ud_breakpoints[breakpoint_hdl];
+
+    /* Revert int3 op byte to original byte */
+    lgdb_revert_to_original_byte(ctx, breakpoint);
+
+    /* Set trap flag so that we can put the breakpoint back! */
+    lgdb_preserve_breakpoint(ctx, breakpoint_hdl);
+
+    /* Trigger the breakpoint user event */
+    IMAGEHLP_LINE64 line_info = lgdb_make_line_info_from_addr(ctx, (void *)ctx->thread_ctx.Rip);
+    if (line_info.SizeOfStruct) {
+        lgdb_user_event_valid_breakpoint_hit_t *lvbh_data =
+            LGDB_LNMALLOC(&ctx->lnmem, lgdb_user_event_valid_breakpoint_hit_t, 1);
+        lvbh_data->file_name = line_info.FileName;
+        lvbh_data->line_number = line_info.LineNumber;
+        lgdb_trigger_user_event(ctx, LUET_VALID_BREAKPOINT_HIT, lvbh_data, 1);
+    }
+
+    lgdb_clear_step_info(ctx);
+}
+
+
+void lgdb_handle_inline_breakpoint(struct lgdb_process_ctx *ctx) {
+    /* This was a __debugbreak() call */
+    printf("BREAKPOINT at __debugbreak() call\n");
+
+    IMAGEHLP_LINE64 line_info = lgdb_make_line_info_from_addr(ctx, (void *)ctx->thread_ctx.Rip);
+    if (line_info.SizeOfStruct) {
+        lgdb_print_current_location(ctx);
+
+        lgdb_user_event_valid_breakpoint_hit_t *lvbh_data =
+            LGDB_LNMALLOC(&ctx->lnmem, lgdb_user_event_valid_breakpoint_hit_t, 1);
+        lvbh_data->file_name = line_info.FileName;
+        lvbh_data->line_number = line_info.LineNumber;
+        lgdb_trigger_user_event(ctx, LUET_VALID_BREAKPOINT_HIT, lvbh_data, 1);
+    }
+
+    lgdb_clear_step_info(ctx);
 }

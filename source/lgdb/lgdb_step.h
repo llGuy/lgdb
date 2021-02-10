@@ -15,4 +15,6 @@ void lgdb_single_asm_step(struct lgdb_process_ctx *ctx);
 void lgdb_single_source_step(struct lgdb_process_ctx *ctx);
 void lgdb_step_into(struct lgdb_process_ctx *ctx);
 
+void lgdb_clear_step_info(struct lgdb_process_ctx *ctx);
+
 #endif

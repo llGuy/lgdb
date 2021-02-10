@@ -79,6 +79,12 @@ bool32_t lgdb_begin_process(lgdb_process_ctx_t *ctx) {
 }
 
 
+bool32_t lgdb_terminate_process(lgdb_process_ctx_t *ctx) {
+    uint32_t exit;
+    return WIN32_CALL(TerminateProcess, ctx->proc_info.hProcess, &exit);
+}
+
+
 void lgdb_close_process(lgdb_process_ctx_t *ctx) {
     CloseHandle(ctx->proc_info.hThread);
     CloseHandle(ctx->proc_info.hProcess);
@@ -154,6 +160,30 @@ bool32_t lgdb_get_debug_event(lgdb_process_ctx_t *ctx, lgdb_user_event_t *dst) {
 
 void lgdb_continue_process(lgdb_process_ctx_t *ctx) {
     lgdb_flush_pending_breakpoints(ctx);
+
+    uint8_t op_byte;
+    size_t bytes_read;
+
+    WIN32_CALL(
+        ReadProcessMemory,
+        ctx->proc_info.hProcess,
+        (void *)ctx->thread_ctx.Rip,
+        &op_byte,
+        1,
+        &bytes_read);
+
+    if (op_byte == 0xCC) {
+        lgdb_entry_value_t *breakpoint_hdl = lgdb_get_from_tablep(
+            &ctx->breakpoints.addr64_to_ud_idx,
+            (void *)(ctx->thread_ctx.Rip));
+
+        assert(!breakpoint_hdl);
+
+        if (ctx->thread_ctx.Rip != ctx->breakpoints.single_step_breakpoint.addr) {
+            ++ctx->thread_ctx.Rip;
+            lgdb_sync_process_thread_context(ctx);
+        }
+    }
 
     ContinueDebugEvent(
         ctx->current_event.dwProcessId,

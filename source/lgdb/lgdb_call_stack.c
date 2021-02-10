@@ -115,5 +115,31 @@ void lgdb_push_to_call_stack(struct lgdb_process_ctx *ctx) {
 
 
 uint64_t lgdb_get_return_address(struct lgdb_process_ctx *ctx) {
+    CONTEXT copy = ctx->thread_ctx;
 
+    STACKFRAME64 stack = {
+        .AddrPC.Offset = copy.Rip,
+        .AddrPC.Mode = AddrModeFlat,
+        .AddrFrame.Offset = copy.Rbp,
+        .AddrFrame.Mode = AddrModeFlat,
+        .AddrStack.Offset = copy.Rsp,
+        .AddrStack.Mode = AddrModeFlat
+    };
+
+    BOOL success = WIN32_CALL(StackWalk64,
+        IMAGE_FILE_MACHINE_AMD64,
+        ctx->proc_info.hProcess,
+        ctx->proc_info.hThread,
+        &stack,
+        &copy,
+        lgdb_read_proc,
+        SymFunctionTableAccess64,
+        SymGetModuleBase64, 0);
+
+    if (success) {
+        return stack.AddrReturn.Offset;
+    }
+    else {
+        return 0;
+    }
 }

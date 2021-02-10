@@ -3,24 +3,11 @@
 
 int global_variable = 12;
 
-
-
-
 void foo() {
-    OutputDebugString("In foo\n");
+    for (int i = 0; i < 10; ++i) {
+        printf("%d\n", i);
+    }
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 int main() {
     printf("Entering main function!\n");
@@ -32,8 +19,6 @@ int main() {
     if (global_variable < 9) {
         printf("Hello\n");
     }
-
-    foo();
 
     for (int i = 0; i < 3; ++i) {
         printf("In loop %d\n", i);

@@ -162,5 +162,17 @@ void lgdb_clear_step_info(struct lgdb_process_ctx *ctx) {
 
 
 void lgdb_step_out(struct lgdb_process_ctx *ctx) {
+    uint64_t addr = lgdb_get_return_address(ctx);
 
+    uint8_t ret_line_first_instr;
+    size_t bytes_read;
+    WIN32_CALL(ReadProcessMemory, ctx->proc_info.hProcess, (void *)addr, &ret_line_first_instr, 1, &bytes_read);
+
+    if (ret_line_first_instr != 0xCC) {
+        /* Put breakpoint at next instruction */
+        uint8_t original_op;
+        lgdb_put_breakpoint_in_bin(ctx, (void *)addr, &original_op);
+        ctx->breakpoints.single_step_breakpoint.addr = addr;
+        ctx->breakpoints.single_step_breakpoint.original_asm_op = original_op;
+    }
 }

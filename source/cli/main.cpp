@@ -33,7 +33,7 @@ int main() {
     /* Example of setting breakpoints (before the process began) */
     lgdb_add_breakpointp(debug_ctx, "main");
     // lgdb_add_breakpointp(debug_ctx, "foo");
-    lgdb_add_breakpointfl(debug_ctx, "main.cpp", 46);
+    lgdb_add_breakpointfl(debug_ctx, "main.cpp", 23);
 
     /* Start the process that is going to be debugged */
     lgdb_begin_process(debug_ctx);
@@ -96,7 +96,9 @@ static bool s_parse_input(lgdb_process_ctx_t *ctx) {
     } break;
 
     case 'f': {
-        
+        lgdb_step_out(ctx);
+        lgdb_continue_process(ctx);
+        return 1;
     } break;
 
     case 't': {

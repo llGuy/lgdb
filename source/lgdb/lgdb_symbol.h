@@ -24,4 +24,6 @@ IMAGEHLP_LINE64 lgdb_make_line_info(struct lgdb_process_ctx *ctx, const char *fi
 IMAGEHLP_LINE64 lgdb_make_line_info_from_addr(struct lgdb_process_ctx *ctx, void *addr);
 IMAGEHLP_LINE64 lgdb_get_next_line_info(struct lgdb_process_ctx *ctx, IMAGEHLP_LINE64 line);
 
+void lgdb_update_symbol_context(struct lgdb_process_ctx *ctx);
+
 #endif

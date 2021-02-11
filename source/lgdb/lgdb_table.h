@@ -9,11 +9,12 @@ typedef int32_t lgdb_entry_value_t;
 
 /* Just a table which takes a unique integer, and maps it to another integer */
 typedef struct lgdb_entry {
-    uint32_t is_initialised : 1;
-    uint32_t key : 31;
+    uint32_t key;
     lgdb_entry_value_t value;
+
     /* In the same bucket */
-    lgdb_handle_t next_entry;
+    uint32_t is_initialised : 1;
+    uint32_t next_entry : 31;
 } lgdb_entry_t;
 
 typedef struct lgdb_table {

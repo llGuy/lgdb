@@ -88,6 +88,7 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
             ctx->breakpoints.preserve_breakpoint = 0;
         }
 
+        /* Only check for jumps if we have hit the jump breakpoint */
         if (ctx->breakpoints.is_checking_for_jump && ctx->breakpoints.set_jump_eflags) {
             if (ctx->thread_ctx.Rip - ctx->breakpoints.single_step_breakpoint.addr != ctx->breakpoints.jump_instr_len) {
                 /* Sure to have made a jump */

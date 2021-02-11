@@ -13,22 +13,6 @@ static lgdb_handle_t s_allocate_entry(lgdb_table_t *table) {
 }
 
 
-static uint32_t s_extract_actual_key(uint32_t raw_key) {
-    union {
-        struct {
-            uint32_t key0 : 16;
-            uint32_t b : 1;
-            uint32_t key1 : 15;
-        };
-        uint32_t bits;
-    } s;
-
-    s.bits = raw_key;
-
-    return s.key0 + s.key1 << 15;
-}
-
-
 static inline lgdb_entry_t *s_get_entry(lgdb_table_t *table, lgdb_handle_t hdl) {
     return &table->pool[hdl];
 }
@@ -67,10 +51,10 @@ void lgdb_clear_table(lgdb_table_t *table) {
 
 
 bool32_t lgdb_insert_in_table(lgdb_table_t *table, uint32_t raw_key, lgdb_entry_value_t value) {
-    uint32_t actual_key = s_extract_actual_key(raw_key);
+    uint32_t actual_key = raw_key;
     uint32_t bucket_idx = actual_key % table->bucket_count;
 
-    printf("Generated %d\n", actual_key);
+    printf("Generated %u\n", actual_key);
 
     lgdb_handle_t *entry_p = &table->buckets[bucket_idx];
 
@@ -134,7 +118,7 @@ bool32_t lgdb_insert_in_tablep(lgdb_table_t *table, void *p, lgdb_entry_value_t 
 
 
 lgdb_entry_value_t *lgdb_get_from_table(lgdb_table_t *table, uint32_t raw_key) {
-    uint32_t actual_key = s_extract_actual_key(raw_key);
+    uint32_t actual_key = raw_key;
     uint32_t bucket_idx = actual_key % table->bucket_count;
 
     lgdb_handle_t entry_hdl = table->buckets[bucket_idx];
@@ -164,7 +148,7 @@ lgdb_entry_value_t *lgdb_get_from_tablep(lgdb_table_t *table, void *p) {
 
 
 bool32_t lgdb_remove_from_table(lgdb_table_t *table, uint32_t raw_key) {
-    uint32_t actual_key = s_extract_actual_key(raw_key);
+    uint32_t actual_key = raw_key;
     uint32_t bucket_idx = actual_key % table->bucket_count;
 
     lgdb_handle_t entry_hdl = table->buckets[bucket_idx];

@@ -83,10 +83,14 @@ static s_prepare_step(struct lgdb_process_ctx *ctx, bool32_t check_for_call) {
             } break;
 
             case ZYDIS_MNEMONIC_INT3: {
-                // printf("Gonna hit debug instruction\n");
+                lgdb_entry_value_t *breakpoint_hdl = lgdb_get_from_tablep(
+                    &ctx->breakpoints.addr64_to_ud_idx,
+                    (void *)(ctx->thread_ctx.Rip + offset));
 
-                flags.next_line_is_break = 1;
-                flags.stop = 1;
+                if (!breakpoint_hdl) {
+                    flags.next_line_is_break = 1;
+                    flags.stop = 1;
+                }
             } break;
 
             case ZYDIS_MNEMONIC_CALL: {

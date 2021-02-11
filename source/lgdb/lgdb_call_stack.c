@@ -143,3 +143,26 @@ uint64_t lgdb_get_return_address(struct lgdb_process_ctx *ctx) {
         return 0;
     }
 }
+
+
+void lgdb_get_stack_frame(struct lgdb_process_ctx *ctx, STACKFRAME64 *dst) {
+    CONTEXT copy = ctx->thread_ctx;
+
+    memset(dst, 0, sizeof(STACKFRAME64));
+    dst->AddrPC.Offset = copy.Rip;
+    dst->AddrPC.Mode = AddrModeFlat;
+    dst->AddrFrame.Offset = copy.Rbp;
+    dst->AddrFrame.Mode = AddrModeFlat;
+    dst->AddrStack.Offset = copy.Rsp;
+    dst->AddrStack.Mode = AddrModeFlat;
+
+    BOOL success = WIN32_CALL(StackWalk64,
+        IMAGE_FILE_MACHINE_AMD64,
+        ctx->proc_info.hProcess,
+        ctx->proc_info.hThread,
+        dst,
+        &copy,
+        lgdb_read_proc,
+        SymFunctionTableAccess64,
+        SymGetModuleBase64, 0);
+}

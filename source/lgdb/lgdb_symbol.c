@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <Windows.h>
 #include <DbgHelp.h>
 #include "lgdb_symbol.h"
@@ -77,4 +78,65 @@ IMAGEHLP_LINE64 lgdb_make_line_info_from_addr(struct lgdb_process_ctx *ctx, void
 IMAGEHLP_LINE64 lgdb_get_next_line_info(struct lgdb_process_ctx *ctx, IMAGEHLP_LINE64 line) {
     WIN32_CALL(SymGetLineNext64, ctx->proc_info.hProcess, &line);
     return line;
+}
+
+
+static BOOL s_enum_symbols(
+    PSYMBOL_INFO pSymInfo,
+    ULONG SymbolSize,
+    PVOID UserContext) {
+    lgdb_process_ctx_t *ctx = (lgdb_process_ctx_t *)UserContext;
+
+    printf("%s\n", pSymInfo->Name);
+
+    ULONG type_index = pSymInfo->TypeIndex;
+
+    // WIN32_CALL(SymGetTypeInfoEx, ctx->proc_info.hProcess, 0, &params);
+
+    wchar_t *buffer = LGDB_LNMALLOC(&ctx->lnmem, wchar_t, 100);
+    memset(buffer, 0, sizeof(wchar_t) * 100);
+    DWORD type_id;
+    WIN32_CALL(SymGetTypeInfo, ctx->proc_info.hProcess, pSymInfo->ModBase, type_index, TI_GET_TYPEID, &type_id);
+
+    // char *b = (char *)buffer;
+
+    printf("Got type\n");
+}
+
+
+BOOL s_enum_types(
+    PSYMBOL_INFO pSymInfo,
+    ULONG SymbolSize,
+    PVOID UserContext) {
+    printf("%s %d %d\n", pSymInfo->Name, pSymInfo->TypeIndex, pSymInfo->Index);
+}
+
+
+
+void lgdb_update_symbol_context(struct lgdb_process_ctx *ctx) {
+    STACKFRAME64 frame;
+    lgdb_get_stack_frame(ctx, &frame);
+
+    IMAGEHLP_STACK_FRAME stack_frame = {
+        .InstructionOffset = ctx->thread_ctx.Rip,
+        .ReturnOffset = frame.AddrReturn.Offset,
+        .FrameOffset = ctx->thread_ctx.Rbp,
+        .StackOffset = ctx->thread_ctx.Rsp,
+        .Virtual = FALSE
+    };
+
+    WIN32_CALL(SymEnumTypes, ctx->proc_info.hProcess, ctx->process_pdb_base, s_enum_types, ctx);
+
+    WIN32_CALL(SymSetContext, ctx->proc_info.hProcess, &stack_frame, NULL);
+
+    ULONG type_index = 7;
+
+    // WIN32_CALL(SymGetTypeInfoEx, ctx->proc_info.hProcess, 0, &params);
+
+    wchar_t *buffer = LGDB_LNMALLOC(&ctx->lnmem, wchar_t, 100);
+    memset(buffer, 0, sizeof(wchar_t) * 100);
+    DWORD type_id;
+    WIN32_CALL(SymGetTypeInfo, ctx->proc_info.hProcess, 0, type_index, TI_GET_SYMTAG, &type_id);
+
+    SymEnumSymbols(ctx->proc_info.hProcess, 0, "*", s_enum_symbols, ctx);
 }

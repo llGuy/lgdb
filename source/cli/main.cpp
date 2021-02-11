@@ -110,6 +110,10 @@ static bool s_parse_input(lgdb_process_ctx_t *ctx) {
         return 1;
     } break;
 
+    case 'p': {
+        lgdb_update_symbol_context(ctx);
+    } break;
+
     case 'q': {
         lgdb_terminate_process(ctx);
         return 0;

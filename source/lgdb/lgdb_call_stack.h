@@ -18,5 +18,6 @@ void lgdb_print_current_location(struct lgdb_process_ctx *ctx);
 void lgdb_push_to_call_stack(struct lgdb_process_ctx *ctx);
 
 uint64_t lgdb_get_return_address(struct lgdb_process_ctx *ctx);
+void lgdb_get_stack_frame(struct lgdb_process_ctx *ctx, STACKFRAME64 *dst);
 
 #endif

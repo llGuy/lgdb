@@ -88,6 +88,7 @@ static s_prepare_step(struct lgdb_process_ctx *ctx, bool32_t check_for_call) {
                     (void *)(ctx->thread_ctx.Rip + offset));
 
                 if (!breakpoint_hdl) {
+                    assert(0);
                     flags.next_line_is_break = 1;
                     flags.stop = 1;
                 }

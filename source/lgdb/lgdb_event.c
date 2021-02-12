@@ -122,6 +122,7 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
 
                             if (breakpoint_hdl) {
                                 lgdb_handle_user_breakpoint(ctx, *breakpoint_hdl);
+                                lgdb_sync_process_thread_context(ctx);
                             }
                             else {
                                 lgdb_handle_inline_breakpoint(ctx);
@@ -169,9 +170,35 @@ void lgdb_handle_exception_debug_event(struct lgdb_process_ctx *ctx) {
             else {
                 IMAGEHLP_LINE64 line_info = lgdb_make_line_info_from_addr(ctx, (void *)ctx->thread_ctx.Rip);
 
+                /* Made a jump to a different line - check for breakpoints */
+                uint8_t op_byte;
+                size_t bytes_read;
+
+                WIN32_CALL(
+                    ReadProcessMemory,
+                    ctx->proc_info.hProcess,
+                    (void *)ctx->thread_ctx.Rip,
+                    &op_byte,
+                    1,
+                    &bytes_read);
+
                 if (line_info.LineNumber == ctx->breakpoints.previous_line) {
                     /* Step again it we haven't moved lines yet */
                     lgdb_single_source_step(ctx);
+                }
+                else if (op_byte == 0xCC) {
+                    /* If breakpoint_hdl != NULL, this is a user-defined breakpoint */
+                    lgdb_entry_value_t *breakpoint_hdl = lgdb_get_from_tablep(
+                        &ctx->breakpoints.addr64_to_ud_idx,
+                        (void *)(ctx->thread_ctx.Rip));
+
+                    if (breakpoint_hdl) {
+                        lgdb_handle_user_breakpoint(ctx, *breakpoint_hdl);
+                        lgdb_sync_process_thread_context(ctx);
+                    }
+                    else {
+                        lgdb_handle_inline_breakpoint(ctx);
+                    }
                 }
                 else {
                     /* The step has finished */

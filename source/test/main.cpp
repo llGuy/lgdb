@@ -19,6 +19,7 @@ int main() {
     printf("Entering main function!\n");
 
     if (global_variable > 9) {
+        __debugbreak();
         printf("Haha\n");
     }
 
@@ -29,8 +30,6 @@ int main() {
     for (int i = 0; i < 3; ++i) {
         printf("In loop %d\n", i);
     }
-
-    __debugbreak();
 
     foo(global_variable, 2, global_variable + 1);
 

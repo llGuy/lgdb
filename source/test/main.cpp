@@ -1,7 +1,10 @@
 #include <Windows.h>
 #include <stdio.h>
 
-int global_variable = 12;
+wchar_t global_variable = 12;
+int global_variable0 = 12;
+float global_variable1 = 12.0f;
+int global_variable2 = 12;
 
 __forceinline void foo(int a, int b, int c) {
     for (int i = 0; i < 10; ++i) {

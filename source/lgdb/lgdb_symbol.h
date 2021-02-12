@@ -9,6 +9,11 @@ typedef struct lgdb_module_symbols {
     const char *path;
 } lgdb_module_symbols_t;
 
+typedef struct lgdb_local_symbols {
+    uint32_t local_symbol_count;
+
+} lgdb_local_symbols_t;
+
 typedef struct lgdb_process_symbols {
     /* 
         Contains more detailed information about the symbols of the modules 

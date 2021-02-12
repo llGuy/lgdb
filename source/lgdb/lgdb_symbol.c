@@ -1,9 +1,13 @@
+#define _NO_CVCONST_H
+
 #include <stdio.h>
 #include <Windows.h>
 #include <DbgHelp.h>
 #include "lgdb_symbol.h"
 #include "lgdb_context.h"
 
+#include <stdbool.h>
+#include "TypeInfoStructs.h"
 
 IMAGEHLP_SYMBOL64 *lgdb_make_symbol_info(
     struct lgdb_process_ctx *ctx,
@@ -87,16 +91,26 @@ static BOOL s_enum_symbols(
     PVOID UserContext) {
     lgdb_process_ctx_t *ctx = (lgdb_process_ctx_t *)UserContext;
 
-    printf("%s\n", pSymInfo->Name);
+    printf("%s %d\n", pSymInfo->Name, pSymInfo->TypeIndex);
 
-    ULONG type_index = pSymInfo->TypeIndex;
+    DWORD tag;
 
-    // WIN32_CALL(SymGetTypeInfoEx, ctx->proc_info.hProcess, 0, &params);
+    WIN32_CALL(SymGetTypeInfo, ctx->proc_info.hProcess, pSymInfo->ModBase, pSymInfo->TypeIndex, TI_GET_SYMTAG, &tag);
 
-    wchar_t *buffer = LGDB_LNMALLOC(&ctx->lnmem, wchar_t, 100);
-    memset(buffer, 0, sizeof(wchar_t) * 100);
-    DWORD type_id;
-    WIN32_CALL(SymGetTypeInfo, ctx->proc_info.hProcess, pSymInfo->ModBase, type_index, TI_GET_TYPEID, &type_id);
+    if (tag == SymTagBaseType) {
+        DWORD type;
+        WIN32_CALL(SymGetTypeInfo, ctx->proc_info.hProcess, pSymInfo->ModBase, pSymInfo->TypeIndex, TI_GET_BASETYPE, &type);
+        printf("%u\n", type);
+    }
+
+    // wchar_t *buffer = (wchar_t *)malloc(sizeof(wchar_t) * 100);
+    // memset(buffer, 0, sizeof(wchar_t) * 100);
+
+    // DWORD base_type;
+    // WIN32_CALL(SymGetTypeInfo, ctx->proc_info.hProcess, pSymInfo->ModBase, type_id, TI_GET_BASETYPE, &base_type);
+
+    SymTagBaseType;
+    btInt;
 
     // char *b = (char *)buffer;
 
@@ -125,18 +139,27 @@ void lgdb_update_symbol_context(struct lgdb_process_ctx *ctx) {
         .Virtual = FALSE
     };
 
-    WIN32_CALL(SymEnumTypes, ctx->proc_info.hProcess, ctx->process_pdb_base, s_enum_types, ctx);
+    // WIN32_CALL(SymEnumTypes, ctx->proc_info.hProcess, ctx->process_pdb_base, s_enum_types, ctx);
 
     WIN32_CALL(SymSetContext, ctx->proc_info.hProcess, &stack_frame, NULL);
 
+    WIN32_CALL(SymEnumSymbols, ctx->proc_info.hProcess, 0, 0, s_enum_symbols, ctx);
+
+    stack_frame.InstructionOffset = ctx->process_pdb_base;
+    
+    // WIN32_CALL(SymSetContext, ctx->proc_info.hProcess, &stack_frame, NULL);
+
     ULONG type_index = 7;
-
-    // WIN32_CALL(SymGetTypeInfoEx, ctx->proc_info.hProcess, 0, &params);
-
     wchar_t *buffer = LGDB_LNMALLOC(&ctx->lnmem, wchar_t, 100);
     memset(buffer, 0, sizeof(wchar_t) * 100);
     DWORD type_id;
-    WIN32_CALL(SymGetTypeInfo, ctx->proc_info.hProcess, 0, type_index, TI_GET_SYMTAG, &type_id);
+    WIN32_CALL(SymGetTypeInfo, ctx->proc_info.hProcess, ctx->process_pdb_base, type_index, TI_GET_SYMNAME, &buffer);
 
-    SymEnumSymbols(ctx->proc_info.hProcess, 0, "*", s_enum_symbols, ctx);
+    type_index = 9;
+    WIN32_CALL(SymGetTypeInfo, ctx->proc_info.hProcess, ctx->process_pdb_base, type_index, TI_GET_SYMNAME, &buffer);
+
+    type_index = 11;
+    WIN32_CALL(SymGetTypeInfo, ctx->proc_info.hProcess, ctx->process_pdb_base, type_index, TI_GET_SYMNAME, &buffer);
+
+    printf("HI\n");
 }

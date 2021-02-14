@@ -5,7 +5,7 @@
 #include "lgdb_utility.h"
 
 /* Typedefed because might want to change this to 64bit */
-typedef int32_t lgdb_entry_value_t;
+typedef uint64_t lgdb_entry_value_t;
 
 /* Just a table which takes a unique integer, and maps it to another integer */
 typedef struct lgdb_entry {
@@ -28,7 +28,6 @@ typedef struct lgdb_table {
 lgdb_table_t lgdb_create_table(uint32_t bucket_count, uint32_t max_entries);
 void lgdb_free_table(lgdb_table_t *table);
 void lgdb_clear_table(lgdb_table_t *table);
-/* Raw key = 32 bit key. The actual key is 31 bits */
 bool32_t lgdb_insert_in_table(lgdb_table_t *table, uint32_t raw_key, lgdb_entry_value_t value);
 /* Insert with string */
 bool32_t lgdb_insert_in_tables(lgdb_table_t *table, const char *str, lgdb_entry_value_t value);

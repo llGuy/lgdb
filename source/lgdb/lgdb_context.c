@@ -19,6 +19,8 @@ lgdb_process_ctx_t *lgdb_create_context(const char *directory, const char *exe_n
     ctx->breakpoints.addr64_to_ud_idx = lgdb_create_table(LGDB_MAX_BREAKPOINTS, LGDB_MAX_BREAKPOINTS);
     ctx->call_stack.frame_count = 0;
     ctx->lnmem = lgdb_create_linear_allocator((uint32_t)lgdb_kilobytes(300));
+    ctx->symbols.sym_name_to_ptr = lgdb_create_table(LGDB_MAX_LOADED_DATA_SYMBOLS, LGDB_MAX_LOADED_DATA_SYMBOLS);
+    ctx->symbols.data_mem = lgdb_create_linear_allocator((uint32_t)lgdb_kilobytes(300));
 
     ZydisDecoderInit(&ctx->dissasm.decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_ADDRESS_WIDTH_64);
     ZydisFormatterInit(&ctx->dissasm.formatter, ZYDIS_FORMATTER_STYLE_INTEL);

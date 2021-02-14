@@ -1,8 +1,12 @@
 #include <stdio.h>
 #include <chrono>
 
+#define _NO_CVCONST_H
 #include <Windows.h>
 #include <DbgHelp.h>
+
+#include <stdbool.h>
+#include <TypeInfoStructs.h>
 
 
 extern "C" {
@@ -49,6 +53,9 @@ int main() {
         if (got_event) {
             /* In cases where execution has been suspended, and input is needed */
             if (debug_ctx->require_input) {
+                lgdb_update_symbol_context(debug_ctx);
+                lgdb_update_local_symbols(debug_ctx);
+
                 /* should_continue will be true if we need to  */
                 bool should_continue = false;
                 while (!should_continue) {
@@ -79,6 +86,7 @@ int main() {
 
 static bool s_parse_input(lgdb_process_ctx_t *ctx) {
     static char buffer[50] = { 0 };
+    static char buffer1[50] = { 0 };
     printf("(lgdb) ");
     int32_t ret = scanf("%s", buffer);
 
@@ -111,7 +119,27 @@ static bool s_parse_input(lgdb_process_ctx_t *ctx) {
     } break;
 
     case 'p': {
-        lgdb_update_symbol_context(ctx);
+        int32_t ret = scanf("%s", buffer);
+
+        /* This is terribe - just testing - don't yell at me */
+        auto *sym = lgdb_get_registered_symbol(ctx, buffer);
+
+        if (sym->data_tag == SymTagData) {
+            printf("%s = ", buffer);
+
+            switch (sym->data.base_type) {
+            case btChar: printf("%c\n", sym->data.value.u8); break;
+            // case btWChar: return "%";
+            case btInt: printf("%d\n", sym->data.value.s32); break;
+            case btUInt: printf("%u\n", sym->data.value.u32); break;
+            case btFloat: printf("%f\n", sym->data.value.f32); break;
+            case btBool: printf("%d\n", sym->data.value.s32); break;
+            case btLong: printf("%u\n", sym->data.value.u32); break;
+            case btULong: printf("%ul\n", sym->data.value.u32); break;
+            }
+        }
+
+        return 0;
     } break;
 
     case 'q': {

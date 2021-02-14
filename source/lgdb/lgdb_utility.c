@@ -3,6 +3,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "lgdb_utility.h"
+#include "lgdb_context.h"
+#include <stdbool.h>
+
+#include "TypeInfoStructs.h"
 
 
 const char *lgdb_concat_cstr(const char *a, const char *b) {
@@ -164,4 +168,67 @@ uint32_t lgdb_hash_buffer(const char *string, uint32_t length) {
 uint32_t lgdb_hash_pointer(void *p) {
     uint64_t u64 = (uint64_t)p;
     return (u64 & 0xffffffff) + (u64 >> 32);
+}
+
+
+uint8_t lgdb_read_current_op_byte(struct lgdb_process_ctx *ctx, uint64_t pc, size_t *bytes_read) {
+    /* Made a jump to a different line - check for breakpoints */
+    uint8_t op_byte;
+
+    WIN32_CALL(
+        ReadProcessMemory,
+        ctx->proc_info.hProcess,
+        (void *)ctx->thread_ctx.Rip,
+        &op_byte,
+        1,
+        bytes_read);
+
+    return op_byte;
+}
+
+/*
+
+    btNoType = 0,
+    btVoid = 1,
+    btChar = 2,
+    btWChar = 3,
+    btInt = 6,
+    btUInt = 7,
+    btFloat = 8,
+    btBCD = 9,
+    btBool = 10,
+    btLong = 13,
+    btULong = 14,
+    btCurrency = 25,
+    btDate = 26,
+    btVariant = 27,
+    btComplex = 28,
+    btBit = 29,
+    btBSTR = 30,
+    btHresult = 31
+*/
+
+
+const char *lgdb_get_base_type_string(uint32_t base_type) {
+    switch (base_type) {
+    case btNoType: return "";
+    case btVoid: return "void";
+    case btChar: return "char";
+    case btWChar: return "wchar_t";
+    case btInt: return "int";
+    case btUInt: return "unsigned int";
+    case btFloat: return "float";
+    case btBCD: return "what is btBCD??";
+    case btBool: return "bool";
+    case btLong: return "long";
+    case btULong: return "unsigned long";
+    case btCurrency: return "what is btCurrency??";
+    case btDate: return "what is btDate??";
+    case btVariant: return "what is btVariant??";
+    case btComplex: return "what is btComplex??";
+    case btBit: return "unsigned int";
+    case btBSTR: return "what is btBSTR??";
+    case btHresult: return "HRESULT"; //??
+    default: return "";
+    }
 }

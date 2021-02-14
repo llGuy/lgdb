@@ -96,6 +96,7 @@ void lgdb_flush_pending_breakpoints(struct lgdb_process_ctx *ctx) {
     ctx->breakpoints.pending_breakpoint_count = 0;
 }
 
+
 bool32_t lgdb_put_breakpoint_in_bin(
     struct lgdb_process_ctx *ctx,
     void *addr64,

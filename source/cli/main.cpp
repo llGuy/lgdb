@@ -30,14 +30,18 @@ static float s_get_time_difference(time_stamp_t end, time_stamp_t start);
 
 int main() {
     /* Initialise context of the debugging process */
+#if 0
     lgdb_process_ctx_t *debug_ctx = lgdb_create_context(
         "C:\\Users\\lucro\\Development\\lgdb\\build\\Debug\\",
         "lgdbtest.exe");
+#endif
+    lgdb_process_ctx_t *debug_ctx = lgdb_create_context(
+        "C:\\Users\\lucro\\Development\\vkPhysics\\build\\Debug\\",
+        "vkPhysics_client.exe");
 
     /* Example of setting breakpoints (before the process began) */
     lgdb_add_breakpointp(debug_ctx, "main");
-    // lgdb_add_breakpointp(debug_ctx, "foo");
-    lgdb_add_breakpointfl(debug_ctx, "main.cpp", 30);
+    // lgdb_add_breakpointfl(debug_ctx, "main.cpp", 30);
 
     /* Start the process that is going to be debugged */
     lgdb_begin_process(debug_ctx);

@@ -86,8 +86,8 @@ void lgdb_handle_create_process_debug_event(struct lgdb_process_ctx *ctx) {
         printf("Loaded \'%s\', symbols WERE NOT loaded\n", ctx->exe_path);
     }
 
-    IMAGEHLP_SYMBOL64 *symbol = lgdb_make_symbol_info(ctx, "foo");
-    printf("foo is at %p\n", symbol->Address);
+    // IMAGEHLP_SYMBOL64 *symbol = lgdb_make_symbol_info(ctx, "foo");
+    // printf("foo is at %p\n", symbol->Address);
 }
 
 

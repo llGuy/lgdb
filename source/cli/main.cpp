@@ -30,14 +30,15 @@ static float s_get_time_difference(time_stamp_t end, time_stamp_t start);
 
 int main() {
     /* Initialise context of the debugging process */
-#if 0
+#if 1
     lgdb_process_ctx_t *debug_ctx = lgdb_create_context(
         "C:\\Users\\lucro\\Development\\lgdb\\build\\Debug\\",
         "lgdbtest.exe");
-#endif
+#else
     lgdb_process_ctx_t *debug_ctx = lgdb_create_context(
         "C:\\Users\\lucro\\Development\\vkPhysics\\build\\Debug\\",
         "vkPhysics_client.exe");
+#endif
 
     /* Example of setting breakpoints (before the process began) */
     lgdb_add_breakpointp(debug_ctx, "main");
@@ -124,24 +125,8 @@ static bool s_parse_input(lgdb_process_ctx_t *ctx) {
 
     case 'p': {
         int32_t ret = scanf("%s", buffer);
-
-        /* This is terribe - just testing - don't yell at me */
-        auto *sym = lgdb_get_registered_symbol(ctx, buffer);
-
-        if (sym->data_tag == SymTagData) {
-            printf("%s = ", buffer);
-
-            switch (sym->data.base_type) {
-            case btChar: printf("%c\n", sym->data.value.u8); break;
-            // case btWChar: return "%";
-            case btInt: printf("%d\n", sym->data.value.s32); break;
-            case btUInt: printf("%u\n", sym->data.value.u32); break;
-            case btFloat: printf("%f\n", sym->data.value.f32); break;
-            case btBool: printf("%d\n", sym->data.value.s32); break;
-            case btLong: printf("%u\n", sym->data.value.u32); break;
-            case btULong: printf("%ul\n", sym->data.value.u32); break;
-            }
-        }
+        lgdb_print_symbol_value(ctx, buffer);
+        putchar('\n');
 
         return 0;
     } break;

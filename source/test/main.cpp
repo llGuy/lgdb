@@ -1,5 +1,6 @@
 #include <Windows.h>
 #include <stdio.h>
+#include <stdint.h>
 
 wchar_t global_variable = 12;
 int global_variable0[10] = { 0 };
@@ -13,6 +14,11 @@ __forceinline void foo(int a, int b, int c) {
 }
 
 int main() {
+    int base_type = 12;
+    uint32_t typedefed_type = 13;
+
+    unsigned int an_array[3] = { 42, 69, 0xDEADBEEF };
+
     int first_variable = 42;
     float second_variable = 3.1415f;
 

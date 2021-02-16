@@ -14,41 +14,48 @@ typedef struct lgdb_module_symbols {
     const char *path;
 } lgdb_module_symbols_t;
 
-typedef struct lgdb_symbol_data {
-    uint64_t size : 32;
-    uint64_t type_tag : 6;
-    uint64_t base_type : 6;
-    uint64_t children_count : 12;
+typedef struct lgdb_symbol_base_type {
+    uint32_t base_type;
+} lgdb_symbol_base_type_t;
 
-    /* Actual value */
+/* Most of these just point to other types */
+typedef struct lgdb_symbol_typedef_type {
+    uint32_t type_index;
+} lgdb_symbol_typedef_type_t;
+
+typedef struct lgdb_symbol_pointer_type {
+    uint32_t type_index;
+} lgdb_symbol_pointer_type_t;
+
+typedef struct lgdb_symbol_array_type {
+    uint32_t type_index;
+} lgdb_symbol_array_type_t;
+
+typedef struct lgdb_symbol_type {
+    uint32_t index;
+    uint32_t tag;
+    uint32_t size;
+
     union {
-        float f32;
-        double f64;
-
-        uint8_t u8;
-        int8_t s8;
-
-        uint16_t u16;
-        int16_t s16;
-
-        uint32_t u32;
-        int32_t s32;
-
-        uint64_t u64;
-        int64_t s64;
-
-        uint64_t bits;
-    } value;
-} lgdb_symbol_data_t;
+        lgdb_symbol_base_type_t base_type;
+        lgdb_symbol_typedef_type_t typedef_type;
+        lgdb_symbol_pointer_type_t pointer_type;
+        lgdb_symbol_array_type_t array_type;
+    } uinfo;
+} lgdb_symbol_type_t;
 
 /* In future, find way to represent the value(s) stored in the symbol */
 typedef struct lgdb_symbol {
+    uint32_t size;
     uint32_t sym_index;
+    uint32_t sym_tag;
+    uint32_t sym_size;
     uint32_t type_index;
-    uint32_t data_tag;
+    /* In debuggee address space */
+    uint64_t start_addr;
 
-    /* For now, just support data symbols */
-    lgdb_symbol_data_t data;
+    /* Pointer in debugger address space */
+    void *debugger_bytes_ptr;
 } lgdb_symbol_t;
 
 typedef struct lgdb_process_symbols {
@@ -59,13 +66,20 @@ typedef struct lgdb_process_symbols {
     uint32_t module_count;
     lgdb_module_symbols_t *modules;
 
-    lgdb_handle_t root_type_node;
-
-    /* Get the data of the symbol from the DebugHlp index of the symbol */
+    /* TODO: Make sure that this doesn't map to a pointer but an index into the symbol_ptr_pool */
     lgdb_table_t sym_name_to_ptr;
+    lgdb_table_t type_idx_to_ptr;
+
+    uint32_t data_symbol_count;
+    /* Just a pool of memory where we can push the pointers to all the data symbols */
+    lgdb_symbol_t **symbol_ptr_pool;
 
     /* Only clear this when changing scope or something */
     lgdb_linear_allocator_t data_mem;
+    /* Never gets cleared until another process gets loaded */
+    lgdb_linear_allocator_t type_mem;
+    /* Where the copy of the data is stored */
+    lgdb_linear_allocator_t copy_mem;
 } lgdb_process_symbols_t;
 
 /* Just some utility functions */
@@ -77,5 +91,6 @@ void lgdb_update_symbol_context(struct lgdb_process_ctx *ctx);
 void lgdb_update_local_symbols(struct lgdb_process_ctx *ctx);
 void lgdb_get_symbol_value(struct lgdb_process_ctx *ctx, SYMBOL_INFO *info, lgdb_symbol_t *dst);
 lgdb_symbol_t *lgdb_get_registered_symbol(struct lgdb_process_ctx *ctx, const char *name);
+void lgdb_print_symbol_value(struct lgdb_process_ctx *ctx, const char *name);
 
 #endif

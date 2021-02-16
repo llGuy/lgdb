@@ -69,7 +69,7 @@ void lgdb_handle_create_process_debug_event(struct lgdb_process_ctx *ctx) {
         ctx->current_event.u.CreateProcessInfo.hFile,
         ctx->exe_path,
         0,
-        ctx->current_event.u.CreateProcessInfo.lpBaseOfImage,
+        (DWORD64)ctx->current_event.u.CreateProcessInfo.lpBaseOfImage,
         0);
 
     /* Determine if the symbols are available */

@@ -13,6 +13,21 @@ __forceinline void foo(int a, int b, int c) {
     }
 }
 
+struct test_base_class0_t {
+    int base_int0;
+    float base_float0;
+};
+
+struct test_base_class1_t {
+    int base_int1;
+    float base_float1;
+};
+
+struct test_derived_class_t : test_base_class0_t, test_base_class1_t {
+    int derived_int;
+    float derived_float;
+};
+
 struct a_basic_structure_t {
     int a;
     float b;
@@ -20,6 +35,12 @@ struct a_basic_structure_t {
 };
 
 int main() {
+    test_derived_class_t derived = {};
+    derived.derived_int = 12;
+    derived.derived_float = 3.0f;
+    derived.base_int0 = 1;
+    derived.base_float0 = 5.0f;
+
     a_basic_structure_t my_structure = {};
     my_structure.a = 12;
     my_structure.b = 3.14f;

@@ -38,6 +38,14 @@ typedef struct lgdb_member_var {
     uint32_t size;
 } lgdb_member_var_t;
 
+/* Basically the same as lgdb_member_var_t... *sigh* */
+typedef struct lgdb_base_class {
+    uint32_t idx;
+    uint32_t type_idx;
+    uint32_t offset;
+    uint32_t size;
+} lgdb_base_class_t;
+
 /* User-defined type */
 typedef struct lgdb_symbol_udt_type {
     uint32_t udt_kind;
@@ -50,7 +58,8 @@ typedef struct lgdb_symbol_udt_type {
     uint32_t *methods_type_idx;
 
     uint32_t base_classes_count;
-    uint32_t *base_classes_type_idx;
+    /* Also contains the offset */
+    lgdb_base_class_t *base_classes_type_idx;
 } lgdb_symbol_udt_type_t;
 
 typedef struct lgdb_symbol_type {

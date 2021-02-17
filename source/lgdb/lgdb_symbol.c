@@ -256,6 +256,7 @@ static uint32_t s_register_base_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t
 static uint32_t s_register_typedef_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type);
 static uint32_t s_register_pointer_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type);
 static uint32_t s_register_array_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type);
+static uint32_t s_register_udt_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type);
 
 
 static uint32_t s_get_type(lgdb_process_ctx_t *ctx, uint32_t type_index) {
@@ -294,6 +295,7 @@ static uint32_t s_get_type(lgdb_process_ctx_t *ctx, uint32_t type_index) {
         case SymTagTypedef: return s_register_typedef_type(ctx, new_type);
         case SymTagPointerType: return s_register_pointer_type(ctx, new_type);
         case SymTagArrayType: return s_register_array_type(ctx, new_type);
+        case SymTagUDT: return s_register_udt_type(ctx, new_type);
         default: {
             printf("Unrecognised type!\n");
         } break;;
@@ -361,6 +363,133 @@ static uint32_t s_register_array_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_
         TI_GET_TYPE,
         &arrayed_type);
     type->uinfo.array_type.type_index = s_get_type(ctx, arrayed_type);
+
+    return type->index;
+}
+
+
+static uint32_t s_register_udt_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type) {
+    uint32_t children_count;
+    WIN32_CALL(
+        SymGetTypeInfo,
+        ctx->proc_info.hProcess,
+        ctx->process_pdb_base,
+        type->index,
+        TI_GET_CHILDRENCOUNT,
+        &children_count);
+    type->uinfo.udt_type.children_count = children_count;
+
+    uint32_t buf_size = sizeof(TI_FINDCHILDREN_PARAMS) + children_count * sizeof(ULONG);
+    TI_FINDCHILDREN_PARAMS *children_params = (TI_FINDCHILDREN_PARAMS *)lgdb_lnmalloc(&ctx->lnmem, buf_size);
+    memset(children_params, 0, buf_size);
+
+    children_params->Count = children_count;
+
+    WIN32_CALL(
+        SymGetTypeInfo,
+        ctx->proc_info.hProcess,
+        ctx->process_pdb_base,
+        type->index,
+        TI_FINDCHILDREN,
+        children_params);
+
+    /* Temporary buffers */
+    uint32_t member_vars_count = 0;
+    lgdb_member_var_t *member_vars = LGDB_LNMALLOC(&ctx->lnmem, lgdb_member_var_t, TIS_MAXNUMCHILDREN);
+
+    uint32_t methods_count = 0;
+    uint32_t *methods= LGDB_LNMALLOC(&ctx->lnmem, uint32_t, TIS_MAXNUMCHILDREN);
+
+    uint32_t base_classes_count = 0;
+    uint32_t *base_classes = LGDB_LNMALLOC(&ctx->lnmem, uint32_t, TIS_MAXNUMCHILDREN);
+
+    for (uint32_t i = 0; i < children_count; ++i) {
+#if 0
+        uint32_t type;
+        WIN32_CALL(
+            SymGetTypeInfo,
+            ctx->proc_info.hProcess,
+            ctx->process_pdb_base,
+            children_params->ChildId[i],
+            TI_GET_TYPE,
+            &type);
+#endif
+
+        uint32_t tag;
+        WIN32_CALL(
+            SymGetTypeInfo,
+            ctx->proc_info.hProcess,
+            ctx->process_pdb_base,
+            children_params->ChildId[i],
+            TI_GET_SYMTAG,
+            &tag);
+
+        if (tag == SymTagData) {
+            /* This is a member variable */
+            uint32_t offset;
+            WIN32_CALL(
+                SymGetTypeInfo,
+                ctx->proc_info.hProcess,
+                ctx->process_pdb_base,
+                children_params->ChildId[i],
+                TI_GET_OFFSET,
+                &offset);
+
+            uint32_t type_idx;
+            WIN32_CALL(
+                SymGetTypeInfo,
+                ctx->proc_info.hProcess,
+                ctx->process_pdb_base,
+                children_params->ChildId[i],
+                TI_GET_TYPE,
+                &type_idx);
+
+            DWORD64 length;
+            WIN32_CALL(
+                SymGetTypeInfo,
+                ctx->proc_info.hProcess,
+                ctx->process_pdb_base,
+                type_idx,
+                TI_GET_LENGTH,
+                &length);
+
+            member_vars[member_vars_count].offset = offset;
+            member_vars[member_vars_count].size = (uint32_t)length;
+            member_vars[member_vars_count].sym_idx = children_params->ChildId[i];
+            member_vars[member_vars_count++].type_idx = s_get_type(ctx, type_idx);
+        }
+        else if (tag == SymTagFunction) {
+            /* This is a method */
+            methods[methods_count++] = children_params->ChildId[i];
+        }
+        else if (tag == SymTagBaseClass) {
+            /* This is a base class */
+            base_classes[base_classes_count++] = children_params->ChildId[i];
+        }
+    }
+
+    uint8_t *children_storage = (uint8_t *)lgdb_lnmalloc(
+        &ctx->symbols.type_mem,
+        sizeof(lgdb_member_var_t) * member_vars_count + sizeof(uint32_t) * (methods_count + base_classes_count));
+
+    uint32_t member_vars_size = sizeof(lgdb_member_var_t) * member_vars_count;
+    uint32_t methods_size = sizeof(uint32_t) * methods_count;
+    uint32_t base_classes_size = sizeof(uint32_t) * base_classes_count;
+
+    memcpy(children_storage, member_vars, member_vars_size);
+    uint32_t offset = member_vars_size;
+    memcpy(children_storage + offset, methods, methods_size);
+    offset += methods_size;
+    memcpy(children_storage + offset, base_classes, base_classes_size);
+
+    type->uinfo.udt_type.member_var_count = member_vars_count;
+    type->uinfo.udt_type.member_vars_type_idx = children_storage;
+
+    type->uinfo.udt_type.methods_count = methods_count;
+    type->uinfo.udt_type.methods_type_idx = children_storage + member_vars_size;
+
+    type->uinfo.udt_type.base_classes_count = base_classes_count;
+    type->uinfo.udt_type.base_classes_type_idx = children_storage + member_vars_size + base_classes_size;
 
     return type->index;
 }
@@ -558,6 +687,23 @@ static int s_print_data(lgdb_process_ctx_t *ctx, void *address, uint32_t size, l
         assert(entry);
 
         return s_print_data(ctx, address, size, (lgdb_symbol_type_t *)*entry);
+    };
+                        
+    case SymTagUDT: {
+        for (int i = 0; i < type->uinfo.udt_type.member_var_count; ++i) {
+            lgdb_member_var_t *var = &type->uinfo.udt_type.member_vars_type_idx[i];
+
+            lgdb_entry_value_t *entry = lgdb_get_from_table(
+                &ctx->symbols.type_idx_to_ptr,
+                var->type_idx);
+            assert(entry);
+
+            s_print_data(ctx, (uint8_t *)address + var->offset, var->size, (lgdb_symbol_type_t *)*entry);
+
+            putchar('\n');
+        }
+
+        return 1;
     };
 
     default: return 0;

@@ -31,6 +31,28 @@ typedef struct lgdb_symbol_array_type {
     uint32_t type_index;
 } lgdb_symbol_array_type_t;
 
+typedef struct lgdb_member_var {
+    uint32_t sym_idx;
+    uint32_t type_idx;
+    uint32_t offset;
+    uint32_t size;
+} lgdb_member_var_t;
+
+/* User-defined type */
+typedef struct lgdb_symbol_udt_type {
+    uint32_t udt_kind;
+    uint32_t children_count;
+    /* Pointer to a (potential) bunch of type indices of the member types */
+    uint32_t member_var_count;
+    lgdb_member_var_t *member_vars_type_idx;
+
+    uint32_t methods_count;
+    uint32_t *methods_type_idx;
+
+    uint32_t base_classes_count;
+    uint32_t *base_classes_type_idx;
+} lgdb_symbol_udt_type_t;
+
 typedef struct lgdb_symbol_type {
     uint32_t index;
     uint32_t tag;
@@ -41,6 +63,7 @@ typedef struct lgdb_symbol_type {
         lgdb_symbol_typedef_type_t typedef_type;
         lgdb_symbol_pointer_type_t pointer_type;
         lgdb_symbol_array_type_t array_type;
+        lgdb_symbol_udt_type_t udt_type;
     } uinfo;
 } lgdb_symbol_type_t;
 

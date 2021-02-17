@@ -13,7 +13,23 @@ __forceinline void foo(int a, int b, int c) {
     }
 }
 
+struct a_basic_structure_t {
+    int a;
+    float b;
+    char some_array[5];
+};
+
 int main() {
+    a_basic_structure_t my_structure = {};
+    my_structure.a = 12;
+    my_structure.b = 3.14f;
+    my_structure.some_array[0] = 'b';
+    my_structure.some_array[1] = 'e';
+    my_structure.some_array[2] = 'e';
+    my_structure.some_array[3] = 'f';
+    my_structure.some_array[4] = 0;
+
+#if 0
     int base_type = 12;
     uint32_t typedefed_type = 13;
 
@@ -26,8 +42,9 @@ int main() {
 
     first_variable += 12;
     second_variable /= 2.0f;
+#endif
 
-    if (global_variable + first_variable > 9) {
+    if (global_variable > 9) {
         __debugbreak();
         printf("Haha\n");
     }

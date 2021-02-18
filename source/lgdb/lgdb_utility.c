@@ -1,3 +1,5 @@
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <Windows.h>
 #include <psapi.h>
 #include <stdlib.h>
@@ -51,7 +53,7 @@ const char *lgdb_get_file_name_from_handle(HANDLE file) {
     char file_name[MAX_PATH + 1];
     HANDLE file_map;
 
-    const char *str_file_name = malloc(sizeof(char) * BUFSIZE);
+    char *str_file_name = malloc(sizeof(char) * BUFSIZE);
 
     // Get the file size.
     DWORD file_size_hi = 0;
@@ -95,10 +97,10 @@ const char *lgdb_get_file_name_from_handle(HANDLE file) {
 
                         // Look up each device name
                         if (QueryDosDeviceA(drive, name, MAX_PATH)) {
-                            size_t name_len = _tcslen(name);
+                            size_t name_len = strlen(name);
 
                             if (name_len < MAX_PATH) {
-                                found = _tcsnicmp(file_name, name, name_len) == 0;
+                                found = _strnicmp(file_name, name, name_len) == 0;
 
                                 if (found) {
                                     sprintf(str_file_name, "%s%s", drive, file_name + name_len);
@@ -132,7 +134,7 @@ BOOL lgdb_read_proc(
     LPDWORD number_of_bytes_read) {
     SIZE_T s;
     BOOL success = ReadProcessMemory(process, (LPVOID)base_addr, buffer, size, &s);
-    *number_of_bytes_read = s;
+    *number_of_bytes_read = (DWORD)s;
 
     return success;
 }

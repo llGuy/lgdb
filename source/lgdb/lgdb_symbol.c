@@ -43,6 +43,7 @@ IMAGEHLP_LINE64 lgdb_make_line_info(
     };
 
     uint32_t displacement;
+
     BOOL success = WIN32_CALL(SymGetLineFromName64,
         ctx->proc_info.hProcess,
         ctx->module_info.ModuleName,
@@ -298,7 +299,9 @@ static uint32_t s_get_type(lgdb_process_ctx_t *ctx, uint32_t type_index) {
         case SymTagUDT: return s_register_udt_type(ctx, new_type);
         default: {
             printf("Unrecognised type!\n");
-        } break;;
+            assert(0);
+            return 0;
+        } break;
         }
     }
     else {
@@ -493,7 +496,7 @@ static uint32_t s_register_udt_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t 
             /* This is a base class */
             base_classes[base_classes_count].offset = offset;
             base_classes[base_classes_count].type_idx = s_get_type(ctx, type_idx);
-            base_classes[base_classes_count].size = length;
+            base_classes[base_classes_count].size = (uint32_t)length;
             base_classes[base_classes_count++].idx = children_params->ChildId[i];
         }
     }
@@ -515,13 +518,13 @@ static uint32_t s_register_udt_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t 
     memcpy(children_storage + offset, base_classes, base_classes_size);
 
     type->uinfo.udt_type.member_var_count = member_vars_count;
-    type->uinfo.udt_type.member_vars_type_idx = children_storage;
+    type->uinfo.udt_type.member_vars_type_idx = (lgdb_member_var_t *)children_storage;
 
     type->uinfo.udt_type.methods_count = methods_count;
-    type->uinfo.udt_type.methods_type_idx = children_storage + member_vars_size;
+    type->uinfo.udt_type.methods_type_idx = (uint32_t *)(children_storage + member_vars_size);
 
     type->uinfo.udt_type.base_classes_count = base_classes_count;
-    type->uinfo.udt_type.base_classes_type_idx = children_storage + member_vars_size + methods_size;
+    type->uinfo.udt_type.base_classes_type_idx = (lgdb_base_class_t *)(children_storage + member_vars_size + methods_size);
 
     return type->index;
 }
@@ -633,7 +636,7 @@ lgdb_symbol_t *lgdb_get_registered_symbol(struct lgdb_process_ctx *ctx, const ch
 
 static int s_print_chars(char *address, uint32_t count, lgdb_symbol_type_t *type) {
     printf("\'%c\'", address[0]);
-    for (int i = 1; i < count; ++i)
+    for (uint32_t i = 1; i < count; ++i)
         printf(", \'%c\'", address[i]);
 
     return 1;
@@ -642,7 +645,7 @@ static int s_print_chars(char *address, uint32_t count, lgdb_symbol_type_t *type
 
 static int s_print_ints(int *address, uint32_t count, lgdb_symbol_type_t *type) {
     printf("%d", address[0]);
-    for (int i = 1; i < count; ++i)
+    for (uint32_t i = 1; i < count; ++i)
         printf(", %d", address[i]);
 
     return 1;
@@ -651,7 +654,7 @@ static int s_print_ints(int *address, uint32_t count, lgdb_symbol_type_t *type) 
 
 static int s_print_uints(unsigned int *address, uint32_t count, lgdb_symbol_type_t *type) {
     printf("%u", address[0]);
-    for (int i = 1; i < count; ++i)
+    for (uint32_t i = 1; i < count; ++i)
         printf(", %u", address[i]);
 
     return 1;
@@ -660,7 +663,7 @@ static int s_print_uints(unsigned int *address, uint32_t count, lgdb_symbol_type
 
 static int s_print_floats(float *address, uint32_t count, lgdb_symbol_type_t *type) {
     printf("%f", address[0]);
-    for (int i = 1; i < count; ++i)
+    for (uint32_t i = 1; i < count; ++i)
         printf(", %f", address[i]);
 
     return 1;
@@ -669,7 +672,7 @@ static int s_print_floats(float *address, uint32_t count, lgdb_symbol_type_t *ty
 
 static int s_print_bools(uint8_t *address, uint32_t count, lgdb_symbol_type_t *type) {
     printf("%s", address[0] ? "true" : "false");
-    for (int i = 1; i < count; ++i)
+    for (uint32_t i = 1; i < count; ++i)
         printf(", %s", address[i] ? "true" : "false");
 
     return 1;
@@ -719,7 +722,7 @@ static int s_print_data(lgdb_process_ctx_t *ctx, void *address, uint32_t size, l
     };
 
     case SymTagPointerType: {
-        return s_print_pointer_type(ctx, address, size, type);
+        return s_print_pointer_type(address, size, type);
     };
 
     case SymTagArrayType: {
@@ -730,10 +733,10 @@ static int s_print_data(lgdb_process_ctx_t *ctx, void *address, uint32_t size, l
 
         return s_print_data(ctx, address, size, (lgdb_symbol_type_t *)*entry);
     };
-                        
+
     case SymTagUDT: {
         /* Print the base classes members */
-        for (int i = 0; i < type->uinfo.udt_type.base_classes_count; ++i) {
+        for (uint32_t i = 0; i < type->uinfo.udt_type.base_classes_count; ++i) {
             lgdb_base_class_t *base_class = &type->uinfo.udt_type.base_classes_type_idx[i];
 
             lgdb_entry_value_t *entry = lgdb_get_from_table(
@@ -747,7 +750,7 @@ static int s_print_data(lgdb_process_ctx_t *ctx, void *address, uint32_t size, l
         }
         
         /* Print the member variables */
-        for (int i = 0; i < type->uinfo.udt_type.member_var_count; ++i) {
+        for (uint32_t i = 0; i < type->uinfo.udt_type.member_var_count; ++i) {
             lgdb_member_var_t *var = &type->uinfo.udt_type.member_vars_type_idx[i];
 
             lgdb_entry_value_t *entry = lgdb_get_from_table(

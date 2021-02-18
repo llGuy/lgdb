@@ -58,7 +58,7 @@ static s_prepare_step(struct lgdb_process_ctx *ctx, bool32_t check_for_call) {
         while (!flags.stop && lgdb_decode_instruction_at(
             &ctx->dissasm,
             instr_buf + (uint32_t)offset,
-            line_size - offset,
+            (uint32_t)(line_size - offset),
             &instr)) {
             switch (instr.mnemonic) {
             case ZYDIS_MNEMONIC_JB:    case ZYDIS_MNEMONIC_JBE:   case ZYDIS_MNEMONIC_JCXZ:

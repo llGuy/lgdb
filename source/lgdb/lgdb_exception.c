@@ -1,3 +1,4 @@
+#include "lgdb_step.h"
 #include "lgdb_context.h"
 #include "lgdb_breakpoint.h"
 #include "lgdb_exception.h"
@@ -48,7 +49,7 @@ void lgdb_handle_breakpoint_exception(struct lgdb_process_ctx *ctx) {
         }
     }
     else if (breakpoint_hdl) {
-        lgdb_handle_user_breakpoint(ctx, *breakpoint_hdl);
+        lgdb_handle_user_breakpoint(ctx, (lgdb_handle_t)*breakpoint_hdl);
     }
     else {
         lgdb_handle_inline_breakpoint(ctx);
@@ -65,7 +66,7 @@ static void s_handle_hitting_breakpoint(lgdb_process_ctx_t *ctx) {
         (void *)(ctx->thread_ctx.Rip));
 
     if (breakpoint_hdl) {
-        lgdb_handle_user_breakpoint(ctx, *breakpoint_hdl);
+        lgdb_handle_user_breakpoint(ctx, (lgdb_handle_t)*breakpoint_hdl);
         lgdb_sync_process_thread_context(ctx);
     }
     else {

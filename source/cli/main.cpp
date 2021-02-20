@@ -1,3 +1,5 @@
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <stdio.h>
 #include <chrono>
 
@@ -7,6 +9,9 @@
 
 #include <stdbool.h>
 #include <TypeInfoStructs.h>
+
+
+#include <tuple>
 
 
 extern "C" {
@@ -30,7 +35,7 @@ static float s_get_time_difference(time_stamp_t end, time_stamp_t start);
 
 int main() {
     /* Initialise context of the debugging process */
-#if 1
+#if 0
     lgdb_process_ctx_t *debug_ctx = lgdb_create_context(
         "C:\\Users\\lucro\\Development\\lgdb\\build\\Debug\\",
         "lgdbtest.exe");
@@ -41,8 +46,8 @@ int main() {
 #endif
 
     /* Example of setting breakpoints (before the process began) */
-    lgdb_add_breakpointp(debug_ctx, "main");
-    // lgdb_add_breakpointfl(debug_ctx, "main.cpp", 30);
+    // lgdb_add_breakpointp(debug_ctx, "main");
+    lgdb_add_breakpointfl(debug_ctx, "vk_context.cpp", 28);
 
     /* Start the process that is going to be debugged */
     lgdb_begin_process(debug_ctx);

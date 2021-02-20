@@ -7,6 +7,8 @@ int global_variable0[10] = { 0 };
 float global_variable1 = 12.0f;
 int global_variable2[10] = { 0 };
 
+static int static_variable = 12;
+
 __forceinline void foo(int a, int b, int c) {
     for (int i = 0; i < 10; ++i) {
         printf("%d %d %d %d\n", i, a, b, c);
@@ -34,7 +36,17 @@ struct a_basic_structure_t {
     char some_array[5];
 };
 
+void some_function(int a, int b, char *pointer) {
+    printf("%d %d %p\n", a, b, pointer);
+}
+
 int main() {
+    void (*function_pointer)(int, int, char *) = some_function;
+
+
+    // some_function(12, 42, nullptr);
+
+#if 0
     test_derived_class_t derived = {};
     derived.derived_int = 12;
     derived.derived_float = 3.0f;
@@ -49,6 +61,7 @@ int main() {
     my_structure.some_array[2] = 'e';
     my_structure.some_array[3] = 'f';
     my_structure.some_array[4] = 0;
+#endif
 
 #if 0
     int base_type = 12;

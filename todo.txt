@@ -6,5 +6,6 @@
     - User defined types
 ## Extend to parameters
 ## Extend to globals which were defined by the programmer
+# Get rid of recursive type generation
 
 # Fix bugs with stepping

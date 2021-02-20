@@ -62,6 +62,17 @@ typedef struct lgdb_symbol_udt_type {
     lgdb_base_class_t *base_classes_type_idx;
 } lgdb_symbol_udt_type_t;
 
+/* Function type */
+typedef struct lgdb_symbol_function_type {
+    uint32_t return_type_index;
+    uint32_t arg_count;
+    /* The type indices of the arguments */
+    uint32_t *arg_types;
+    /* If this is a member function */
+    uint32_t class_id; // Set to 0xFFFFFFFF if it's not member function
+    uint32_t this_adjust;
+} lgdb_symbol_function_type_t;
+
 typedef struct lgdb_symbol_type {
     uint32_t index;
     uint32_t tag;
@@ -73,6 +84,7 @@ typedef struct lgdb_symbol_type {
         lgdb_symbol_pointer_type_t pointer_type;
         lgdb_symbol_array_type_t array_type;
         lgdb_symbol_udt_type_t udt_type;
+        lgdb_symbol_function_type_t function_type;
     } uinfo;
 } lgdb_symbol_type_t;
 

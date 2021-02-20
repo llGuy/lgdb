@@ -258,6 +258,7 @@ static uint32_t s_register_typedef_type(lgdb_process_ctx_t *ctx, lgdb_symbol_typ
 static uint32_t s_register_pointer_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type);
 static uint32_t s_register_array_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type);
 static uint32_t s_register_udt_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type);
+static uint32_t s_register_function_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type);
 
 
 static uint32_t s_get_type(lgdb_process_ctx_t *ctx, uint32_t type_index) {
@@ -297,6 +298,7 @@ static uint32_t s_get_type(lgdb_process_ctx_t *ctx, uint32_t type_index) {
         case SymTagPointerType: return s_register_pointer_type(ctx, new_type);
         case SymTagArrayType: return s_register_array_type(ctx, new_type);
         case SymTagUDT: return s_register_udt_type(ctx, new_type);
+        case SymTagFunctionType: return s_register_function_type(ctx, new_type);
         default: {
             printf("Unrecognised type!\n");
             assert(0);
@@ -530,6 +532,120 @@ static uint32_t s_register_udt_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t 
 }
 
 
+static uint32_t s_register_function_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type) {
+    uint32_t return_type_index;
+    WIN32_CALL(
+        SymGetTypeInfo,
+        ctx->proc_info.hProcess,
+        ctx->process_pdb_base,
+        type->index,
+        TI_GET_TYPEID,
+        &return_type_index);
+    type->uinfo.function_type.return_type_index = return_type_index;
+
+    uint32_t arg_count;
+    WIN32_CALL(
+        SymGetTypeInfo,
+        ctx->proc_info.hProcess,
+        ctx->process_pdb_base,
+        type->index,
+        TI_GET_COUNT,
+        &arg_count);
+    type->uinfo.function_type.arg_count = arg_count;
+
+    uint32_t class_id;
+    BOOL result = SymGetTypeInfo(
+        ctx->proc_info.hProcess,
+        ctx->process_pdb_base,
+        type->index,
+        TI_GET_CLASSPARENTID,
+        &class_id);
+
+    if (result) {
+        type->uinfo.function_type.class_id = class_id;
+
+        uint32_t this_adjust;
+        WIN32_CALL(
+            SymGetTypeInfo,
+            ctx->proc_info.hProcess,
+            ctx->process_pdb_base,
+            type->index,
+            TI_GET_THISADJUST,
+            &this_adjust);
+        type->uinfo.function_type.this_adjust = this_adjust;
+    }
+    else {
+        type->uinfo.function_type.class_id = 0xFFFFFFFF;
+    }
+
+    /* Get function arguments */
+    uint32_t children_count;
+    WIN32_CALL(
+        SymGetTypeInfo,
+        ctx->proc_info.hProcess,
+        ctx->process_pdb_base,
+        type->index,
+        TI_GET_CHILDRENCOUNT,
+        &children_count);
+
+    if (children_count) {
+        uint32_t buf_size = sizeof(TI_FINDCHILDREN_PARAMS) + children_count * sizeof(ULONG);
+        TI_FINDCHILDREN_PARAMS *children_params = (TI_FINDCHILDREN_PARAMS *)lgdb_lnmalloc(&ctx->lnmem, buf_size);
+        memset(children_params, 0, buf_size);
+        children_params->Count = children_count;
+        WIN32_CALL(
+            SymGetTypeInfo,
+            ctx->proc_info.hProcess,
+            ctx->process_pdb_base,
+            type->index,
+            TI_FINDCHILDREN,
+            children_params);
+
+        uint32_t counter = 0;
+        uint32_t *tmp_args = LGDB_LNMALLOC(&ctx->lnmem, uint32_t, children_count);
+
+        for (uint32_t i = 0; i < children_count && counter < arg_count; ++i) {
+            uint32_t tag;
+            WIN32_CALL(
+                SymGetTypeInfo,
+                ctx->proc_info.hProcess,
+                ctx->process_pdb_base,
+                children_params->ChildId[i],
+                TI_GET_SYMTAG,
+                &tag);
+
+            uint32_t type;
+            WIN32_CALL(
+                SymGetTypeInfo,
+                ctx->proc_info.hProcess,
+                ctx->process_pdb_base,
+                children_params->ChildId[i],
+                TI_GET_TYPE,
+                &type);
+
+            if (tag == SymTagFunctionArgType) {
+                tmp_args[counter++] = type;
+            }
+        }
+
+        assert(counter == arg_count);
+
+        type->uinfo.function_type.arg_types = LGDB_LNMALLOC(
+            &ctx->symbols.type_mem,
+            uint32_t,
+            counter);
+
+        memcpy(type->uinfo.function_type.arg_types, tmp_args, sizeof(uint32_t) * counter);
+
+        return type->index;
+    }
+    else {
+        type->uinfo.function_type.arg_count = 0;
+        return type->index;
+    }
+}
+
+
 static void *s_get_real_sym_address(lgdb_process_ctx_t *ctx, PSYMBOL_INFO pSymInfo, lgdb_symbol_t *sym) {
     uint64_t base;
     if (pSymInfo->Flags & SYMFLAG_REGREL) {
@@ -549,7 +665,8 @@ static void *s_get_real_sym_address(lgdb_process_ctx_t *ctx, PSYMBOL_INFO pSymIn
         }
     }
     else if (pSymInfo->Flags & SYMFLAG_REGISTER) {
-
+        /* Need to handle this when the time comes */
+        assert(0);
     }
     else {
         /* Just get the raw address */
@@ -785,6 +902,9 @@ void lgdb_print_symbol_value(struct lgdb_process_ctx *ctx, const char *name) {
 
         /* Simply update the value(s) stored in the symbol */
         s_print_data(ctx, sym->debugger_bytes_ptr, sym->size, type);
+    }
+    else {
+        
     }
 }
 

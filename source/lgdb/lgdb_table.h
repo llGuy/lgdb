@@ -25,7 +25,10 @@ typedef struct lgdb_table {
     uint32_t pool_ptr;
 } lgdb_table_t;
 
-lgdb_table_t lgdb_create_table(uint32_t bucket_count, uint32_t max_entries);
+lgdb_table_t lgdb_create_table(
+    uint32_t bucket_count, uint32_t max_entries,
+    lgdb_handle_t *handles, lgdb_entry_t *entries);
+
 void lgdb_free_table(lgdb_table_t *table);
 void lgdb_clear_table(lgdb_table_t *table);
 bool32_t lgdb_insert_in_table(lgdb_table_t *table, uint32_t raw_key, lgdb_entry_value_t value);

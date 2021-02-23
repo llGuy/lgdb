@@ -19,12 +19,22 @@ static inline lgdb_entry_t *s_get_entry(lgdb_table_t *table, lgdb_handle_t hdl) 
 }
 
 
-lgdb_table_t lgdb_create_table(uint32_t bucket_count, uint32_t max_entries) {
+lgdb_table_t lgdb_create_table(
+    uint32_t bucket_count, uint32_t max_entries,
+    lgdb_handle_t *handles, lgdb_entry_t *entries) {
+    if (!handles) {
+        handles = (lgdb_handle_t *)malloc(sizeof(lgdb_handle_t) * bucket_count);
+    }
+
+    if (!entries) {
+        entries = (lgdb_entry_t *)malloc(sizeof(lgdb_entry_t) * max_entries);
+    }
+
     lgdb_table_t table = {
         .bucket_count = bucket_count,
         .max_entries = max_entries,
-        .buckets = (lgdb_handle_t *)malloc(sizeof(lgdb_handle_t) * bucket_count),
-        .pool = (lgdb_entry_t *)malloc(sizeof(lgdb_entry_t) * max_entries),
+        .buckets = handles,
+        .pool = entries,
         .pool_ptr = 0
     };
 
@@ -54,8 +64,6 @@ void lgdb_clear_table(lgdb_table_t *table) {
 bool32_t lgdb_insert_in_table(lgdb_table_t *table, uint32_t raw_key, lgdb_entry_value_t value) {
     uint32_t actual_key = raw_key;
     uint32_t bucket_idx = actual_key % table->bucket_count;
-
-    printf("Generated %u\n", actual_key);
 
     lgdb_handle_t *entry_p = &table->buckets[bucket_idx];
 

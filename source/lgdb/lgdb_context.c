@@ -16,11 +16,11 @@ lgdb_process_ctx_t *lgdb_create_context(const char *directory, const char *exe_n
     memset(ctx, 0, sizeof(lgdb_process_ctx_t));
     ctx->directory = directory;
     ctx->exe_name = exe_name;
-    ctx->breakpoints.addr64_to_ud_idx = lgdb_create_table(LGDB_MAX_BREAKPOINTS, LGDB_MAX_BREAKPOINTS);
+    ctx->breakpoints.addr64_to_ud_idx = lgdb_create_table(LGDB_MAX_BREAKPOINTS, LGDB_MAX_BREAKPOINTS, NULL, NULL);
     ctx->call_stack.frame_count = 0;
     ctx->lnmem = lgdb_create_linear_allocator((uint32_t)lgdb_kilobytes(300));
-    ctx->symbols.sym_name_to_ptr = lgdb_create_table(LGDB_MAX_LOADED_DATA_SYMBOLS, LGDB_MAX_LOADED_DATA_SYMBOLS);
-    ctx->symbols.type_idx_to_ptr = lgdb_create_table(LGDB_MAX_LOADED_DATA_SYMBOLS, LGDB_MAX_LOADED_DATA_SYMBOLS);
+    ctx->symbols.sym_name_to_ptr = lgdb_create_table(LGDB_MAX_LOADED_DATA_SYMBOLS, LGDB_MAX_LOADED_DATA_SYMBOLS, NULL, NULL);
+    ctx->symbols.type_idx_to_ptr = lgdb_create_table(LGDB_MAX_LOADED_DATA_SYMBOLS, LGDB_MAX_LOADED_DATA_SYMBOLS, NULL, NULL);
     ctx->symbols.data_mem = lgdb_create_linear_allocator((uint32_t)lgdb_kilobytes(300));
     ctx->symbols.type_mem = lgdb_create_linear_allocator((uint32_t)lgdb_kilobytes(300));
     ctx->symbols.copy_mem = lgdb_create_linear_allocator((uint32_t)lgdb_kilobytes(300));

@@ -73,12 +73,21 @@ typedef struct lgdb_symbol_function_type {
     uint32_t this_adjust;
 } lgdb_symbol_function_type_t;
 
+typedef struct lgdb_symbol_enum_type {
+    uint32_t type_index;
+    /* Other things */
+
+    lgdb_table_t *value_to_name;
+} lgdb_symbol_enum_type_t;
+
 typedef struct lgdb_symbol_type {
     uint32_t index;
     uint32_t tag;
     uint32_t size;
 
     union {
+        lgdb_symbol_enum_type_t enum_type;
+
         lgdb_symbol_base_type_t base_type;
         lgdb_symbol_typedef_type_t typedef_type;
         lgdb_symbol_pointer_type_t pointer_type;

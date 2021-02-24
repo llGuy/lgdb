@@ -77,7 +77,7 @@ typedef struct lgdb_symbol_enum_type {
     uint32_t type_index;
     /* Other things */
 
-    lgdb_table_t *value_to_name;
+    lgdb_table_t value_to_name;
 } lgdb_symbol_enum_type_t;
 
 typedef struct lgdb_symbol_type {

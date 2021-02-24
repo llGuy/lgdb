@@ -316,17 +316,6 @@ static uint32_t s_register_udt_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t 
     lgdb_base_class_t *base_classes = LGDB_LNMALLOC(&ctx->lnmem, lgdb_base_class_t, TIS_MAXNUMCHILDREN);
 
     for (uint32_t i = 0; i < children_count; ++i) {
-#if 0
-        uint32_t type;
-        WIN32_CALL(
-            SymGetTypeInfo,
-            ctx->proc_info.hProcess,
-            ctx->process_pdb_base,
-            children_params->ChildId[i],
-            TI_GET_TYPE,
-            &type);
-#endif
-
         uint32_t tag;
         WIN32_CALL(
             SymGetTypeInfo,
@@ -562,15 +551,10 @@ static uint32_t s_register_enum_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t
     uint32_t enum_count = 0;
 
     /* Allocate a table which associates a value to an enumerator value */
-    lgdb_table_t *table = LGDB_LNMALLOC(
-        &ctx->symbols.type_mem,
-        lgdb_table_t,
-        1);
-
-    *table = lgdb_create_table(
-        enum_count, enum_count,
-        LGDB_LNMALLOC(&ctx->symbols.type_mem, lgdb_handle_t, enum_count),
-        LGDB_LNMALLOC(&ctx->symbols.type_mem, lgdb_entries_t, enum_count));
+    type->uinfo.enum_type.value_to_name = lgdb_create_table(
+        children_count, children_count,
+        LGDB_LNMALLOC(&ctx->symbols.type_mem, lgdb_handle_t, children_count),
+        LGDB_LNMALLOC(&ctx->symbols.type_mem, lgdb_entry_t, children_count));
 
     for (uint32_t i = 0; i < children_count; ++i) {
         uint32_t tag;
@@ -578,13 +562,40 @@ static uint32_t s_register_enum_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t
             SymGetTypeInfo,
             ctx->proc_info.hProcess,
             ctx->process_pdb_base,
-            type->index,
+            children_params->ChildId[i],
             TI_GET_SYMTAG,
             &tag);
 
         if (tag == SymTagData) {
             ++enum_count;
         }
+
+        wchar_t *src_name;
+        WIN32_CALL(SymGetTypeInfo,
+            ctx->proc_info.hProcess,
+            ctx->process_pdb_base,
+            children_params->ChildId[i],
+            TI_GET_SYMNAME,
+            &src_name);
+
+        uint32_t length = wcslen(src_name);
+        wchar_t *dst_name = LGDB_LNMALLOC(&ctx->symbols.type_mem, wchar_t, length + 1);
+        wcsncpy(dst_name, src_name, length);
+        dst_name[length] = 0;
+
+        VARIANT variant;
+        WIN32_CALL(
+            SymGetTypeInfo,
+            ctx->proc_info.hProcess,
+            ctx->process_pdb_base,
+            children_params->ChildId[i],
+            TI_GET_VALUE,
+            &variant);
+
+        lgdb_insert_in_table(&type->uinfo.enum_type.value_to_name, variant.intVal, (lgdb_entry_value_t)dst_name);
+
+        /* Needs to be freed */
+        LocalFree(src_name);
     }
 
     return type->index;
@@ -770,6 +781,31 @@ static int s_print_pointer_type(void *address, uint32_t size, lgdb_symbol_type_t
 }
 
 
+static int s_print_enum_type(void *address, uint32_t size, lgdb_symbol_type_t *type) {
+    int32_t bytes;
+
+    switch (size) {
+    case 1: bytes = *(int8_t *)address; break;
+    case 2: bytes = *(int16_t *)address; break;
+    case 4: bytes = *(int32_t *)address; break;
+    default: {
+        printf("Unknown enum size\n");
+        assert(0);
+    } break;
+    }
+
+    lgdb_entry_value_t *entry = lgdb_get_from_table(&type->uinfo.enum_type.value_to_name, bytes);
+
+    if (entry) {
+        wchar_t *enum_value_name = (wchar_t *)*entry;
+        return wprintf(L"%s (%d)", enum_value_name, bytes);
+    }
+    else {
+        return printf("Unknown enum value (%d)", bytes);
+    }
+}
+
+
 static int s_print_data(lgdb_process_ctx_t *ctx, void *address, uint32_t size, lgdb_symbol_type_t *type) {
     switch (type->tag) {
     case SymTagBaseType: return s_print_base_type(address, size, type);
@@ -814,6 +850,11 @@ static int s_print_data(lgdb_process_ctx_t *ctx, void *address, uint32_t size, l
         }
 
         return 1;
+    };
+
+    case SymTagEnum: {
+        // lgdb_symbol_type_t *enum_type = s_get_type(ctx, type->uinfo.enum_type.type_index);
+        return s_print_enum_type(address, size, type);
     };
 
     default: return 0;

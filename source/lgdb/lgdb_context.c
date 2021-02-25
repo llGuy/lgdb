@@ -215,3 +215,15 @@ BOOL lgdb_retrieve_thread_context(lgdb_process_ctx_t *ctx) {
 void lgdb_sync_process_thread_context(lgdb_process_ctx_t *ctx) {
     WIN32_CALL(SetThreadContext, ctx->proc_info.hThread, &ctx->thread_ctx);
 }
+
+
+void lgdb_print_diagnostics(lgdb_process_ctx_t *ctx) {
+    printf("###### DIAGNOSTICS ######\n");
+    printf("--- MEMORY DIAGNOSTICS ---\n");
+    lgdb_lndiagnostic_print(&ctx->lnmem, "Context Linear Allocator");
+    lgdb_lndiagnostic_print(&ctx->symbols.data_mem, "Data Linear Allocator (used for allocating lgdb_symbol_t structures)");
+    lgdb_lndiagnostic_print(&ctx->symbols.type_mem, "Type Linear Allocator (used for allocating anything to do with type info)");
+    lgdb_lndiagnostic_print(&ctx->symbols.copy_mem, "Copy Linear Allocator (used for allocating copies of the bytes of structures from debuggee)");
+    printf("--- SYMBOL DIAGNOSTICS ---\n");
+    printf("");
+}

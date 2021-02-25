@@ -111,6 +111,8 @@ typedef struct lgdb_symbol {
     void *debugger_bytes_ptr;
 } lgdb_symbol_t;
 
+typedef void (*lgdb_update_symbol_proc_t)(struct lgdb_process_ctx *ctx, const char *name, lgdb_symbol_t *sym);
+
 typedef struct lgdb_process_symbols {
     /* 
         Contains more detailed information about the symbols of the modules 
@@ -127,12 +129,15 @@ typedef struct lgdb_process_symbols {
     /* Just a pool of memory where we can push the pointers to all the data symbols */
     lgdb_symbol_t **symbol_ptr_pool;
 
+    /* Will need to get rid of this in the future */
     /* Only clear this when changing scope or something */
     lgdb_linear_allocator_t data_mem;
     /* Never gets cleared until another process gets loaded */
     lgdb_linear_allocator_t type_mem;
     /* Where the copy of the data is stored */
     lgdb_linear_allocator_t copy_mem;
+
+    lgdb_update_symbol_proc_t current_updt_sym_proc;
 } lgdb_process_symbols_t;
 
 /* Just some utility functions */
@@ -141,8 +146,13 @@ IMAGEHLP_LINE64 lgdb_make_line_info(struct lgdb_process_ctx *ctx, const char *fi
 IMAGEHLP_LINE64 lgdb_make_line_info_from_addr(struct lgdb_process_ctx *ctx, void *addr);
 IMAGEHLP_LINE64 lgdb_get_next_line_info(struct lgdb_process_ctx *ctx, IMAGEHLP_LINE64 line);
 void lgdb_update_symbol_context(struct lgdb_process_ctx *ctx);
-void lgdb_update_local_symbols(struct lgdb_process_ctx *ctx);
-void lgdb_get_symbol_value(struct lgdb_process_ctx *ctx, SYMBOL_INFO *info, lgdb_symbol_t *dst);
+
+/* To deprecate!! */
+void lgdb_update_local_symbols_depr(struct lgdb_process_ctx *ctx);
+
+void lgdb_update_local_symbols(struct lgdb_process_ctx *ctx, lgdb_update_symbol_proc_t proc);
+
+lgdb_symbol_type_t *lgdb_get_type(struct lgdb_process_ctx *ctx, uint32_t type_index);
 lgdb_symbol_t *lgdb_get_registered_symbol(struct lgdb_process_ctx *ctx, const char *name);
 void lgdb_print_symbol_value(struct lgdb_process_ctx *ctx, const char *name);
 

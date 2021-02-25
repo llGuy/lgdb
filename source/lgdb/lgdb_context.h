@@ -58,5 +58,6 @@ bool32_t lgdb_get_debug_event(lgdb_process_ctx_t *ctx, lgdb_user_event_t *dst);
 void lgdb_continue_process(lgdb_process_ctx_t *ctx);
 BOOL lgdb_retrieve_thread_context(lgdb_process_ctx_t *ctx);
 void lgdb_sync_process_thread_context(lgdb_process_ctx_t *ctx);
+void lgdb_print_diagnostics(lgdb_process_ctx_t *ctx);
 
 #endif

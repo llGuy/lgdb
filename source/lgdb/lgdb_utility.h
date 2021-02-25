@@ -24,4 +24,7 @@ const char *lgdb_get_base_type_string(uint32_t base_type);
 #define WIN32_CALL(func, ...) \
     lgdb_check_win32_call(func(__VA_ARGS__), #func)
 
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
+
 #endif

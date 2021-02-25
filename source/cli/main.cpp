@@ -35,7 +35,7 @@ static float s_get_time_difference(time_stamp_t end, time_stamp_t start);
 
 int main() {
     /* Initialise context of the debugging process */
-#if 1
+#if 0
     lgdb_process_ctx_t *debug_ctx = lgdb_create_context(
         "C:\\Users\\lucro\\Development\\lgdb\\build\\Debug\\",
         "lgdbtest.exe");
@@ -64,7 +64,7 @@ int main() {
             /* In cases where execution has been suspended, and input is needed */
             if (debug_ctx->require_input) {
                 lgdb_update_symbol_context(debug_ctx);
-                lgdb_update_local_symbols(debug_ctx);
+                // lgdb_update_local_symbols(debug_ctx);
 
                 /* should_continue will be true if we need to  */
                 bool should_continue = false;
@@ -139,6 +139,11 @@ static bool s_parse_input(lgdb_process_ctx_t *ctx) {
     case 'q': {
         lgdb_terminate_process(ctx);
         return 0;
+    } break;
+
+        /* Diagnostics: */
+    case 'd': {
+        lgdb_print_diagnostics(ctx);
     } break;
 
     }

@@ -157,7 +157,7 @@ static uint32_t s_register_function_type(lgdb_process_ctx_t *ctx, lgdb_symbol_ty
 static uint32_t s_register_enum_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type);
 
 
-static lgdb_symbol_type_t *s_get_type(lgdb_process_ctx_t *ctx, uint32_t type_index) {
+lgdb_symbol_type_t *lgdb_get_type(struct lgdb_process_ctx *ctx, uint32_t type_index) {
     lgdb_entry_value_t *entry = lgdb_get_from_table(&ctx->symbols.type_idx_to_ptr, type_index);
 
     if (!entry) {
@@ -578,9 +578,9 @@ static uint32_t s_register_enum_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t
             TI_GET_SYMNAME,
             &src_name);
 
-        uint32_t length = wcslen(src_name);
+        uint32_t length = (uint32_t)wcslen(src_name);
         wchar_t *dst_name = LGDB_LNMALLOC(&ctx->symbols.type_mem, wchar_t, length + 1);
-        wcsncpy(dst_name, src_name, length);
+        wcsncpy_s(dst_name, length, src_name, length);
         dst_name[length] = 0;
 
         VARIANT variant;
@@ -633,14 +633,14 @@ static void *s_get_real_sym_address(lgdb_process_ctx_t *ctx, PSYMBOL_INFO pSymIn
 }
 
 
-static BOOL s_update_symbols(
+static BOOL s_update_symbols_depr(
     PSYMBOL_INFO pSymInfo,
     ULONG SymbolSize,
     PVOID UserContext) {
     lgdb_process_ctx_t *ctx = (lgdb_process_ctx_t *)UserContext;
 
     /* First register the type if it hasn't been yet */
-    lgdb_symbol_type_t *type = s_get_type(ctx, pSymInfo->TypeIndex);
+    lgdb_symbol_type_t *type = lgdb_get_type(ctx, pSymInfo->TypeIndex);
 
     lgdb_entry_value_t *entry = lgdb_get_from_tables(
         &ctx->symbols.sym_name_to_ptr,
@@ -688,7 +688,44 @@ static BOOL s_update_symbols(
 }
 
 
-void lgdb_update_local_symbols(struct lgdb_process_ctx *ctx) {
+static BOOL s_update_symbols(
+    PSYMBOL_INFO pSymInfo,
+    ULONG SymbolSize,
+    PVOID UserContext) {
+    lgdb_process_ctx_t *ctx = (lgdb_process_ctx_t *)UserContext;
+
+    lgdb_symbol_t new_sym = {
+        .sym_index = pSymInfo->Index,
+        .type_index = pSymInfo->TypeIndex,
+        .start_addr = pSymInfo->Address,
+        .size = pSymInfo->Size,
+        .sym_tag = pSymInfo->Tag,
+        .debugger_bytes_ptr = LGDB_LNMALLOC(&ctx->lnmem, uint8_t, pSymInfo->Size)
+    };
+
+    size_t bytes_read;
+    WIN32_CALL(ReadProcessMemory,
+        ctx->proc_info.hProcess,
+        s_get_real_sym_address(ctx, pSymInfo, &new_sym),
+        new_sym.debugger_bytes_ptr,
+        new_sym.size,
+        &bytes_read);
+
+    assert(ctx->symbols.current_updt_sym_proc);
+    ctx->symbols.current_updt_sym_proc(ctx, pSymInfo->Name, &new_sym);
+
+    return 1;
+}
+
+
+
+void lgdb_update_local_symbols_depr(struct lgdb_process_ctx *ctx) {
+    WIN32_CALL(SymEnumSymbols, ctx->proc_info.hProcess, 0, "*", s_update_symbols_depr, ctx);
+}
+
+
+void lgdb_update_local_symbols(struct lgdb_process_ctx *ctx, lgdb_update_symbol_proc_t proc) {
+    ctx->symbols.current_updt_sym_proc = proc;
     WIN32_CALL(SymEnumSymbols, ctx->proc_info.hProcess, 0, "*", s_update_symbols, ctx);
 }
 
@@ -811,7 +848,7 @@ static int s_print_data(lgdb_process_ctx_t *ctx, void *address, uint32_t size, l
     case SymTagBaseType: return s_print_base_type(address, size, type);
 
     case SymTagTypedef: {
-        lgdb_symbol_type_t *typedefed_type = s_get_type(ctx, type->uinfo.typedef_type.type_index);
+        lgdb_symbol_type_t *typedefed_type = lgdb_get_type(ctx, type->uinfo.typedef_type.type_index);
 
         return s_print_data(ctx, address, size, typedefed_type);
     };
@@ -821,7 +858,7 @@ static int s_print_data(lgdb_process_ctx_t *ctx, void *address, uint32_t size, l
     };
 
     case SymTagArrayType: {
-        lgdb_symbol_type_t *arrayed_type = s_get_type(ctx, type->uinfo.array_type.type_index);
+        lgdb_symbol_type_t *arrayed_type = lgdb_get_type(ctx, type->uinfo.array_type.type_index);
 
         return s_print_data(ctx, address, size, arrayed_type);
     };
@@ -831,7 +868,7 @@ static int s_print_data(lgdb_process_ctx_t *ctx, void *address, uint32_t size, l
         for (uint32_t i = 0; i < type->uinfo.udt_type.base_classes_count; ++i) {
             lgdb_base_class_t *base_class = &type->uinfo.udt_type.base_classes_type_idx[i];
 
-            lgdb_symbol_type_t *base_class_type = s_get_type(ctx, base_class->type_idx);
+            lgdb_symbol_type_t *base_class_type = lgdb_get_type(ctx, base_class->type_idx);
 
             s_print_data(ctx, (uint8_t *)address + base_class->offset, base_class->size, base_class_type);
 
@@ -842,7 +879,7 @@ static int s_print_data(lgdb_process_ctx_t *ctx, void *address, uint32_t size, l
         for (uint32_t i = 0; i < type->uinfo.udt_type.member_var_count; ++i) {
             lgdb_member_var_t *var = &type->uinfo.udt_type.member_vars_type_idx[i];
 
-            lgdb_symbol_type_t *member_type = s_get_type(ctx, var->type_idx);
+            lgdb_symbol_type_t *member_type = lgdb_get_type(ctx, var->type_idx);
 
             s_print_data(ctx, (uint8_t *)address + var->offset, var->size, member_type);
 
@@ -853,7 +890,7 @@ static int s_print_data(lgdb_process_ctx_t *ctx, void *address, uint32_t size, l
     };
 
     case SymTagEnum: {
-        // lgdb_symbol_type_t *enum_type = s_get_type(ctx, type->uinfo.enum_type.type_index);
+        // lgdb_symbol_type_t *enum_type = lgdb_get_type(ctx, type->uinfo.enum_type.type_index);
         return s_print_enum_type(address, size, type);
     };
 
@@ -870,7 +907,7 @@ void lgdb_print_symbol_value(struct lgdb_process_ctx *ctx, const char *name) {
     if (entry) {
         lgdb_symbol_t *sym = (lgdb_symbol_t *)(*entry);
 
-        /* TODO: Use s_get_type */
+        /* TODO: Use lgdb_get_type */
         lgdb_entry_value_t *type_entry = lgdb_get_from_table(&ctx->symbols.type_idx_to_ptr, sym->type_index);
         lgdb_symbol_type_t *type = (lgdb_symbol_type_t *)(*type_entry);
 

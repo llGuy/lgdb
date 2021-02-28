@@ -48,7 +48,12 @@ typedef struct lgdb_process_ctx {
     };
 } lgdb_process_ctx_t;
 
-lgdb_process_ctx_t *lgdb_create_context(const char *directory, const char *exe_name);
+lgdb_process_ctx_t *lgdb_create_context();
+/* directory = path/to/folder/  exe = myprogram.exe */
+/* (note, full path would be: path/to/folder/myprogram.exe */
+void lgdb_open_process_context(lgdb_process_ctx_t *ctx, const char *directory, const char *exe);
+/* Simply resets default values and gets ready to initialise the context again */
+void lgdb_close_process_context(lgdb_process_ctx_t *ctx);
 void lgdb_free_context(lgdb_process_ctx_t *ctx);
 bool32_t lgdb_begin_process(lgdb_process_ctx_t *ctx);
 bool32_t lgdb_terminate_process(lgdb_process_ctx_t *ctx);

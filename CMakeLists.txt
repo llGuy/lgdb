@@ -37,7 +37,8 @@ target_link_libraries(lgdbgui PUBLIC "lgdb"
 target_include_directories(lgdbgui PUBLIC "${CMAKE_SOURCE_DIR}/dependencies/SDL/include/")
 target_include_directories(lgdbgui PUBLIC "${CMAKE_SOURCE_DIR}/dependencies/glew-2.1.0/include")
 target_include_directories(lgdbgui PUBLIC "${CMAKE_SOURCE_DIR}/dependencies/glm/")
-target_include_directories(lgdbgui PUBLIC "dependencies/imgui/include/" )
+target_include_directories(lgdbgui PUBLIC "dependencies/imgui/include/")
+target_include_directories(lgdbgui PUBLIC "dependencies/editor/")
 target_compile_definitions(lgdbgui PUBLIC GLEW_STATIC)
 
 add_executable(lgdbtest "${TEST_SOURCES}")

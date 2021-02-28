@@ -1,4 +1,5 @@
 #include "utility.hpp"
+#include "debugger.hpp"
 #include "file_dialog.hpp"
 #include "app_context.hpp"
 
@@ -11,7 +12,7 @@
 #include <imgui_impl_opengl3.h>
 
 
-void app_context_t::run(int argc, char *argv[]) {
+void app_context_t::run(const char *cmdline) {
     init();
 
     while (is_running_) {
@@ -20,6 +21,7 @@ void app_context_t::run(int argc, char *argv[]) {
         /* Update and render */
         ImGuiID main_window = tick_main_window();
         file_dialog_->tick();
+        debugger_->tick(main_window);
 
         end_frame();
     }
@@ -33,6 +35,10 @@ void app_context_t::init() {
     init_window_ctx();
 
     file_dialog_ = new file_dialog_t;
+
+    debugger_ = new debugger_t;
+    debugger_->init();
+
     is_running_ = 1;
 }
 
@@ -166,7 +172,7 @@ void app_context_t::tick_menubar() {
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Open..")) {
-                file_dialog_->open(dummy, "*\0\0");
+                file_dialog_->open(debugger_t::open_file_proc, "*\0\0", debugger_);
             }
 
             if (ImGui::MenuItem("Close")) {
@@ -182,6 +188,24 @@ void app_context_t::tick_menubar() {
             if (ImGui::MenuItem("Dissassembly")) {
             }
             if (ImGui::MenuItem("Memory")) {
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Debug")) {
+            if (ImGui::MenuItem("Start With Debugger", "Alt+Shift+D")) {
+            }
+            if (ImGui::MenuItem("Start Without Debugger", "Alt+Shift+R")) {
+            }
+            if (ImGui::MenuItem("Start And Break At Main", "Alt+1")) {
+                debugger_->start_and_break_at_main();
+            }
+            if (ImGui::MenuItem("Step Over", "Alt+D")) {
+            }
+            if (ImGui::MenuItem("Step Into", "Alt+S")) {
+            }
+            if (ImGui::MenuItem("Step Out", "Alt+W")) {
+            }
+            if (ImGui::MenuItem("Toggle Breakpoint", "Alt+2")) {
             }
             ImGui::EndMenu();
         }

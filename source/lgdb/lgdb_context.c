@@ -11,11 +11,9 @@
 #include "lgdb_utility.h"
 
 
-lgdb_process_ctx_t *lgdb_create_context(const char *directory, const char *exe_name) {
+lgdb_process_ctx_t *lgdb_create_context() {
     lgdb_process_ctx_t *ctx = (lgdb_process_ctx_t *)malloc(sizeof(lgdb_process_ctx_t));
     memset(ctx, 0, sizeof(lgdb_process_ctx_t));
-    ctx->directory = directory;
-    ctx->exe_name = exe_name;
     ctx->breakpoints.addr64_to_ud_idx = lgdb_create_table(LGDB_MAX_BREAKPOINTS, LGDB_MAX_BREAKPOINTS, NULL, NULL);
     ctx->call_stack.frame_count = 0;
     ctx->lnmem = lgdb_create_linear_allocator((uint32_t)lgdb_kilobytes(300));
@@ -31,6 +29,28 @@ lgdb_process_ctx_t *lgdb_create_context(const char *directory, const char *exe_n
     ZydisFormatterInit(&ctx->dissasm.formatter, ZYDIS_FORMATTER_STYLE_INTEL);
 
     return ctx;
+}
+
+
+void lgdb_open_process_context(lgdb_process_ctx_t *ctx, const char *directory, const char *exe_name) {
+    ctx->directory = directory;
+    ctx->exe_name = exe_name;
+}
+
+
+void lgdb_close_process_context(lgdb_process_ctx_t *ctx) {
+    free((char *)ctx->exe_path);
+    ctx->exe_path = NULL;
+    ctx->directory = NULL;
+    lgdb_clear_table(&ctx->breakpoints.addr64_to_ud_idx);
+    ctx->call_stack.frame_count = 0;
+    lgdb_lnclear(&ctx->lnmem);
+    lgdb_clear_table(&ctx->symbols.sym_name_to_ptr);
+    lgdb_clear_table(&ctx->symbols.type_idx_to_ptr);
+    lgdb_lnclear(&ctx->symbols.data_mem);
+    lgdb_lnclear(&ctx->symbols.type_mem);
+    lgdb_lnclear(&ctx->symbols.copy_mem);
+    ctx->symbols.data_symbol_count = 0;
 }
 
 

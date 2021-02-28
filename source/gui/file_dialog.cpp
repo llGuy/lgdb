@@ -8,14 +8,15 @@
 
 
 file_dialog_t::file_dialog_t() 
-    : proc_(NULL), filter_(NULL) {
+    : proc_(NULL), filter_(NULL), obj_(NULL) {
     /* Empty for now */
 }
 
 
-void file_dialog_t::open(file_dialog_open_proc_t proc, const char *filter) {
+void file_dialog_t::open(file_dialog_open_proc_t proc, const char *filter, void *obj) {
     proc_ = proc;
     filter_ = filter;
+    obj_ = obj;
 }
 
 
@@ -33,7 +34,7 @@ void file_dialog_t::tick() {
 
         if (GetOpenFileNameA(&info) == TRUE) {
             // Call the procedure
-            proc_(info.lpstrFile);
+            proc_(info.lpstrFile, obj_);
             proc_ = NULL;
         }
         else {

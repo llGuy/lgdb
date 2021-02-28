@@ -35,12 +35,15 @@ static float s_get_time_difference(time_stamp_t end, time_stamp_t start);
 
 int main() {
     /* Initialise context of the debugging process */
+    lgdb_process_ctx_t *debug_ctx = lgdb_create_context();
+
 #if 0
     lgdb_process_ctx_t *debug_ctx = lgdb_create_context(
         "C:\\Users\\lucro\\Development\\lgdb\\build\\Debug\\",
         "lgdbtest.exe");
 #else
-    lgdb_process_ctx_t *debug_ctx = lgdb_create_context(
+    lgdb_open_process_context(
+        debug_ctx,
         "C:\\Users\\lucro\\Development\\vkPhysics\\build\\Debug\\",
         "vkPhysics_client.exe");
 #endif

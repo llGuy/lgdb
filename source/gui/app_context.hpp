@@ -2,6 +2,7 @@
 
 
 class file_dialog_t;
+class debugger_t;
 
 struct SDL_Window;
 
@@ -17,7 +18,7 @@ public:
     /* To have more control over deinitialisation, deinitialisation happens at destroy */
     ~app_context_t() = default;
 
-    void run(int argc, char *argv[]);
+    void run(const char *cmdline);
 
 private:
 
@@ -42,5 +43,6 @@ private:
     bool is_running_;
 
     file_dialog_t *file_dialog_;
+    debugger_t *debugger_;
 
 };

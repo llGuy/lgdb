@@ -27,8 +27,12 @@ typedef struct lgdb_process_ctx {
     lgdb_breakpoints_t breakpoints;
     lgdb_call_stack_t call_stack;
     lgdb_dissasm_t dissasm;
-    lgdb_user_event_t current_user_event;
     lgdb_linear_allocator_t lnmem;
+
+    lgdb_linear_allocator_t events;
+    lgdb_user_event_t *event_head;
+    lgdb_user_event_t *event_tail;
+    bool32_t received_event;
 
     union {
         const char *exe_path;
@@ -44,6 +48,7 @@ typedef struct lgdb_process_ctx {
             uint32_t is_running : 1;
             uint32_t triggered_user_event : 1;
             uint32_t require_input : 1;
+            uint32_t block_on_wait : 1;
         };
     };
 } lgdb_process_ctx_t;
@@ -58,7 +63,10 @@ void lgdb_free_context(lgdb_process_ctx_t *ctx);
 bool32_t lgdb_begin_process(lgdb_process_ctx_t *ctx);
 bool32_t lgdb_terminate_process(lgdb_process_ctx_t *ctx);
 void lgdb_close_process(lgdb_process_ctx_t *ctx);
-bool32_t lgdb_get_debug_event(lgdb_process_ctx_t *ctx, lgdb_user_event_t *dst);
+/* Pass INFINITE for no timeout */
+void lgdb_get_debug_event(lgdb_process_ctx_t *ctx, uint32_t timout);
+bool32_t lgdb_translate_debug_event(lgdb_process_ctx_t *ctx);
+void lgdb_clear_events(lgdb_process_ctx_t *ctx);
 /* Also does things like flushing all pending breakpoints */
 void lgdb_continue_process(lgdb_process_ctx_t *ctx);
 BOOL lgdb_retrieve_thread_context(lgdb_process_ctx_t *ctx);

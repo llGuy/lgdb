@@ -83,7 +83,7 @@ void app_context_t::init_window_ctx() {
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
         SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
         SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-        window_ = SDL_CreateWindow("AVITool", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+        window_ = SDL_CreateWindow("lGdb", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
         gl_ctx_ = SDL_GL_CreateContext(window_);
         SDL_GL_MakeCurrent(window_, gl_ctx_);
         SDL_GL_SetSwapInterval(1);

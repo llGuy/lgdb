@@ -253,7 +253,7 @@ void lgdb_handle_user_breakpoint(struct lgdb_process_ctx *ctx, lgdb_handle_t bre
     IMAGEHLP_LINE64 line_info = lgdb_make_line_info_from_addr(ctx, (void *)ctx->thread_ctx.Rip);
     if (line_info.SizeOfStruct) {
         lgdb_user_event_valid_breakpoint_hit_t *lvbh_data =
-            LGDB_LNMALLOC(&ctx->lnmem, lgdb_user_event_valid_breakpoint_hit_t, 1);
+            LGDB_LNMALLOC(&ctx->events, lgdb_user_event_valid_breakpoint_hit_t, 1);
         lvbh_data->file_name = line_info.FileName;
         lvbh_data->line_number = line_info.LineNumber;
         lgdb_trigger_user_event(ctx, LUET_VALID_BREAKPOINT_HIT, lvbh_data, 1);
@@ -272,7 +272,7 @@ void lgdb_handle_inline_breakpoint(struct lgdb_process_ctx *ctx) {
         lgdb_print_current_location(ctx);
 
         lgdb_user_event_valid_breakpoint_hit_t *lvbh_data =
-            LGDB_LNMALLOC(&ctx->lnmem, lgdb_user_event_valid_breakpoint_hit_t, 1);
+            LGDB_LNMALLOC(&ctx->events, lgdb_user_event_valid_breakpoint_hit_t, 1);
         lvbh_data->file_name = line_info.FileName;
         lvbh_data->line_number = line_info.LineNumber;
         lgdb_trigger_user_event(ctx, LUET_VALID_BREAKPOINT_HIT, lvbh_data, 1);

@@ -11,7 +11,7 @@ void lgdb_handle_access_violation_exception(struct lgdb_process_ctx *ctx) {
 
 static void s_trigger_single_step_finished(lgdb_process_ctx_t *ctx, IMAGEHLP_LINE64 *line_info) {
     lgdb_user_event_source_code_step_finished_t *luescsf_data =
-        LGDB_LNMALLOC(&ctx->lnmem, lgdb_user_event_source_code_step_finished_t, 1);
+        LGDB_LNMALLOC(&ctx->events, lgdb_user_event_source_code_step_finished_t, 1);
     luescsf_data->file_name = line_info->FileName;
     luescsf_data->line_number = line_info->LineNumber;
     lgdb_trigger_user_event(ctx, LUET_SOURCE_CODE_STEP_FINISHED, luescsf_data, 1);
@@ -77,7 +77,7 @@ static void s_handle_hitting_breakpoint(lgdb_process_ctx_t *ctx) {
 
 static void s_trigger_step_in_finished(lgdb_process_ctx_t *ctx, IMAGEHLP_LINE64 *line_info) {
     lgdb_user_event_step_in_finished_t *luesif_data =
-        LGDB_LNMALLOC(&ctx->lnmem, lgdb_user_event_step_in_finished_t, 1);
+        LGDB_LNMALLOC(&ctx->events, lgdb_user_event_step_in_finished_t, 1);
     luesif_data->file_name = line_info->FileName;
     luesif_data->line_number = line_info->LineNumber;
     lgdb_trigger_user_event(ctx, LUET_STEP_IN_FUNCTION_FINISHED, luesif_data, 1);

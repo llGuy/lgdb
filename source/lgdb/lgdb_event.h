@@ -16,6 +16,7 @@ void lgdb_handle_output_debug_string_event(struct lgdb_process_ctx *ctx);
 
 /* User-level debug events (that the user would care about) */
 enum lgdb_user_event_type_t {
+    LUET_INVALID,
     /* The same as the system debug events */
     LUET_EXCEPTION, // May be breakpoint if it is not user-defined (__debugbreak)
     LUET_CREATE_PROCESS,
@@ -40,6 +41,7 @@ enum lgdb_user_event_type_t {
 
 typedef struct lgdb_user_event {
     uint32_t ev_type;
+    struct lgdb_user_event *next;
     void *ev_data;
 } lgdb_user_event_t;
 

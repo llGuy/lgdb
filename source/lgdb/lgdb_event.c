@@ -170,8 +170,19 @@ void lgdb_handle_output_debug_string_event(struct lgdb_process_ctx *ctx) {
 
 
 void lgdb_trigger_user_event(struct lgdb_process_ctx *ctx, uint32_t ev_type, void *ev_data, bool32_t require_input) {
+    lgdb_user_event_t *ev = (lgdb_user_event_t *)lgdb_lnmalloc(&ctx->events, sizeof(lgdb_user_event_t));
+    ev->ev_type = ev_type;
+    ev->ev_data = ev_data;
+    ev->next = NULL;
+
+    /* No events have been pushed yet */
+    if (!ctx->event_tail) {
+        ctx->event_head = ctx->event_tail = ev;
+    }
+    else {
+        ctx->event_head->next = ev;
+    }
+
     ctx->triggered_user_event = 1;
-    ctx->require_input = require_input;
-    ctx->current_user_event.ev_type = ev_type;
-    ctx->current_user_event.ev_data = ev_data;
+    ctx->require_input |= require_input;
 }

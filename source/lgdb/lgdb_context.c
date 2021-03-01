@@ -17,6 +17,7 @@ lgdb_process_ctx_t *lgdb_create_context() {
     ctx->breakpoints.addr64_to_ud_idx = lgdb_create_table(LGDB_MAX_BREAKPOINTS, LGDB_MAX_BREAKPOINTS, NULL, NULL);
     ctx->call_stack.frame_count = 0;
     ctx->lnmem = lgdb_create_linear_allocator((uint32_t)lgdb_kilobytes(300));
+    ctx->events = lgdb_create_linear_allocator((uint32_t)lgdb_kilobytes(5));
     ctx->symbols.sym_name_to_ptr = lgdb_create_table(LGDB_MAX_LOADED_DATA_SYMBOLS, LGDB_MAX_LOADED_DATA_SYMBOLS, NULL, NULL);
     ctx->symbols.type_idx_to_ptr = lgdb_create_table(LGDB_MAX_LOADED_DATA_SYMBOLS, LGDB_MAX_LOADED_DATA_SYMBOLS, NULL, NULL);
     ctx->symbols.data_mem = lgdb_create_linear_allocator((uint32_t)lgdb_kilobytes(300));
@@ -24,6 +25,7 @@ lgdb_process_ctx_t *lgdb_create_context() {
     ctx->symbols.copy_mem = lgdb_create_linear_allocator((uint32_t)lgdb_kilobytes(300));
     ctx->symbols.data_symbol_count = 0;
     ctx->symbols.symbol_ptr_pool = (lgdb_symbol_t **)malloc(sizeof(lgdb_symbol_t *) * LGDB_MAX_LOADED_DATA_SYMBOLS);
+    ctx->block_on_wait = 0;
 
     ZydisDecoderInit(&ctx->dissasm.decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_ADDRESS_WIDTH_64);
     ZydisFormatterInit(&ctx->dissasm.formatter, ZYDIS_FORMATTER_STYLE_INTEL);
@@ -118,14 +120,19 @@ void lgdb_close_process(lgdb_process_ctx_t *ctx) {
 }
 
 
-bool32_t lgdb_get_debug_event(lgdb_process_ctx_t *ctx, lgdb_user_event_t *dst) {
+void lgdb_get_debug_event(lgdb_process_ctx_t *ctx, uint32_t timeout) {
     // TODO: Figure out what the difference between process and debug_ev.u.CreateProcessInfo.hProcess is
 
     /* Wait for debugger event to occur */
     // TODO: Replace INFINITE with 0 so that we can easily check for events in GUI app
-    BOOL success = WaitForDebugEvent(&ctx->current_event, INFINITE);
+    BOOL success = WaitForDebugEvent(&ctx->current_event, timeout);
 
-    if (success) {
+    ctx->received_event = success;
+}
+
+
+bool32_t lgdb_translate_debug_event(lgdb_process_ctx_t *ctx) {
+    if (ctx->received_event) {
         lgdb_retrieve_thread_context(ctx);
 
         switch (ctx->current_event.dwDebugEventCode) {
@@ -170,18 +177,20 @@ bool32_t lgdb_get_debug_event(lgdb_process_ctx_t *ctx, lgdb_user_event_t *dst) {
 
         }
 
-        if (ctx->triggered_user_event) {
-            ctx->triggered_user_event = 0;
-
-            dst->ev_data = ctx->current_user_event.ev_data;
-            dst->ev_type = ctx->current_user_event.ev_type;
-        }
-
         return 1;
     }
     else {
         return 0;
     }
+}
+
+
+void lgdb_clear_events(lgdb_process_ctx_t *ctx) {
+    lgdb_lnclear(&ctx->events);
+    ctx->event_head = NULL;
+    ctx->event_tail = NULL;
+    ctx->triggered_user_event = 0;
+    ctx->require_input = 0;
 }
 
 

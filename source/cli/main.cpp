@@ -59,31 +59,38 @@ int main() {
 
     /* Debugger loop */
     while (debug_ctx->is_running) {
+        lgdb_clear_events(debug_ctx);
+
         /* Poll all debug events and handle accordingly with callbacks */
-        lgdb_user_event_t ev = {};
-        bool got_event = lgdb_get_debug_event(debug_ctx, &ev);
+        lgdb_get_debug_event(debug_ctx, INFINITE);
+        bool got_event = lgdb_translate_debug_event(debug_ctx);
 
         if (got_event) {
-            /* In cases where execution has been suspended, and input is needed */
-            if (debug_ctx->require_input) {
-                lgdb_update_symbol_context(debug_ctx);
-                // lgdb_update_local_symbols(debug_ctx);
+            bool should_continue = 1;
 
-                /* should_continue will be true if we need to  */
-                bool should_continue = false;
-                while (!should_continue) {
-                    float dt = s_get_time_difference(s_get_current_time(), now);
-                    printf("%f ms elapsed\n", (dt * 1000.0f));
+            for (lgdb_user_event_t *ev = debug_ctx->event_tail; ev; ev = ev->next) {
+                /* In cases where execution has been suspended, and input is needed */
+                if (debug_ctx->require_input) {
+                    lgdb_update_symbol_context(debug_ctx);
+                    // lgdb_update_local_symbols(debug_ctx);
 
-                    should_continue = s_parse_input(debug_ctx);
+                    /* should_continue will be true if we need to  */
+                    bool should_continue = false;
+                    while (!should_continue) {
+                        float dt = s_get_time_difference(s_get_current_time(), now);
+                        printf("%f ms elapsed\n", (dt * 1000.0f));
 
-                    now = s_get_current_time();
+                        should_continue = s_parse_input(debug_ctx);
+
+                        now = s_get_current_time();
+                    }
+
+                    should_continue = 0;
                 }
             }
-            else {
-                /* Make the process continue */
+
+            if (should_continue)
                 lgdb_continue_process(debug_ctx);
-            }
         }
     }
 

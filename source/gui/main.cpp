@@ -4,14 +4,15 @@
 #include <Windows.h>
 
 
-#if 0
+#if 1
 int WinMain(
     HINSTANCE hInstance,
     HINSTANCE hPrevInstance,
     LPSTR     lpCmdLine,
     int       nShowCmd) {
-#endif
+#else
 int main() {
+#endif
     app_context_t ctx = {};
     ctx.run(NULL);
 }

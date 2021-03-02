@@ -53,7 +53,7 @@ void app_context_t::init_imgui() {
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
     ImGui::StyleColorsDark();
 
@@ -156,8 +156,9 @@ ImGuiID app_context_t::tick_main_window() {
     ImGui::DockSpace(dock_space_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None | ImGuiDockNodeFlags_PassthruCentralNode);
 
     tick_menubar();
-
     ImGui::End();
+
+    tick_debugging_keybindings();
 
     return dock_space_id;
 }
@@ -171,7 +172,7 @@ void dummy(const char *file_name) {
 void app_context_t::tick_menubar() {
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("Open..")) {
+            if (ImGui::MenuItem("Open..", "Ctrl+Shift+O")) {
                 file_dialog_->open(debugger_t::open_file_proc, "*\0\0", debugger_);
             }
 
@@ -200,6 +201,7 @@ void app_context_t::tick_menubar() {
                 debugger_->start_and_break_at_main();
             }
             if (ImGui::MenuItem("Step Over", "Alt+D")) {
+                debugger_->step_over();
             }
             if (ImGui::MenuItem("Step Into", "Alt+S")) {
             }
@@ -210,5 +212,38 @@ void app_context_t::tick_menubar() {
             ImGui::EndMenu();
         }
         ImGui::EndMenuBar();
+    }
+}
+
+
+void app_context_t::tick_debugging_keybindings() {
+#if 0
+    if (ImGui::IsKeyPressed(SDL_SCANCODE_LALT)) {
+        if (ImGui::IsKeyReleased(SDL_SCANCODE_1)) {
+            debugger_->start_and_break_at_main();
+        }
+
+        if (ImGui::IsKeyReleased(SDL_SCANCODE_D)) {
+            debugger_->step_over();
+        }
+    }
+#endif
+    if (ImGui::IsKeyDown(SDL_SCANCODE_LALT) || ImGui::IsKeyDown(SDL_SCANCODE_RALT)) {
+
+        if (ImGui::IsKeyPressed(SDL_SCANCODE_W)) {
+            debugger_->step_out();
+        }
+
+        if (ImGui::IsKeyPressed(SDL_SCANCODE_1)) {
+            debugger_->start_and_break_at_main();
+        }
+
+        if (ImGui::IsKeyPressed(SDL_SCANCODE_S)) {
+            debugger_->step_into();
+        }
+
+        if (ImGui::IsKeyPressed(SDL_SCANCODE_D)) {
+            debugger_->step_over();
+        }
     }
 }

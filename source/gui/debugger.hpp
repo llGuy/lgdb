@@ -32,33 +32,24 @@ struct open_panels_t {
 #define MAX_TASK_COUNT 20
 
 
+using debugger_task_t = void (*)(struct shared_t *shared);
+
+
 struct shared_t {
     bool processing_events;
     std::mutex ctx_mutex;
 
     uint32_t pending_task_count;
-    struct debugger_task_t *tasks[MAX_TASK_COUNT];
+    debugger_task_t tasks[MAX_TASK_COUNT];
 
     lgdb_process_ctx_t *ctx;
 };
 
 
-struct debugger_task_t {
-    virtual void execute(shared_t *shared) = 0;
-    virtual ~debugger_task_t() {};
-};
-
-
-struct debugger_task_start_process_t : debugger_task_t {
-    ~debugger_task_start_process_t() override {
-    }
-
-    void execute(shared_t *shared) override {
-        lgdb_add_breakpointp(shared->ctx, "main");
-        lgdb_begin_process(shared->ctx);
-        shared->processing_events = 1;
-    }
-};
+void debugger_task_start_process(struct shared_t *shared);
+void debugger_task_step_over(struct shared_t *shared);
+void debugger_task_step_into(struct shared_t *shared);
+void debugger_task_step_out(struct shared_t *shared);
 
 
 class debugger_t {
@@ -74,8 +65,10 @@ public:
     void start_without_debugger();
     void start_and_break_at_main();
     void step_over();
-    void step_in();
+    void step_into();
     void step_out();
+
+    bool is_process_running();
 
     static void open_file_proc(const char *filename, void *obj);
 
@@ -95,5 +88,6 @@ private:
     uint32_t output_buffer_max_;
     std::thread loop_thread_;
     shared_t *shared_;
+    bool is_running_;
 
 };

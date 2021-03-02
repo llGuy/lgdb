@@ -3,6 +3,7 @@
 
 extern "C" {
 #include <lgdb_context.h>
+#include <lgdb_step.h>
 }
 
 
@@ -19,9 +20,37 @@ extern "C" {
 char debugger_t::strdir_buffer[262] = { 0 };
 
 
+void debugger_task_start_process(shared_t *shared) {
+    lgdb_add_breakpointp(shared->ctx, "main");
+    lgdb_begin_process(shared->ctx);
+    shared->processing_events = 1;
+}
+
+
+void debugger_task_step_over(shared_t *shared) {
+    lgdb_single_source_step(shared->ctx);
+    lgdb_continue_process(shared->ctx);
+    shared->processing_events = 1;
+}
+
+
+void debugger_task_step_into(shared_t *shared) {
+    lgdb_step_into(shared->ctx);
+    lgdb_continue_process(shared->ctx);
+    shared->processing_events = 1;
+}
+
+
+void debugger_task_step_out(shared_t *shared) {
+    lgdb_step_out(shared->ctx);
+    lgdb_continue_process(shared->ctx);
+    shared->processing_events = 1;
+}
+
+
 static void s_debugger_loop_proc(shared_t *shared) {
     /* Timeout = 10 milliseconds*/
-    uint32_t timeout = 3;
+    uint32_t timeout = 1;
 
     bool active = true;
     shared->processing_events = false;
@@ -30,8 +59,7 @@ static void s_debugger_loop_proc(shared_t *shared) {
         { // Check if received task from main thread (create process for example)
             std::lock_guard<std::mutex> lock (shared->ctx_mutex);
             for (uint32_t i = 0; i < shared->pending_task_count; ++i) {
-                shared->tasks[i]->execute(shared);
-                delete shared->tasks[i];
+                (shared->tasks[i])(shared);
             }
             shared->pending_task_count = 0;
         }
@@ -57,7 +85,7 @@ static void s_debugger_loop_proc(shared_t *shared) {
             }
         }
         else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(3));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
 }
@@ -85,6 +113,8 @@ void debugger_t::init() {
     shared_->pending_task_count = 0;
 
     loop_thread_ = std::thread(s_debugger_loop_proc, shared_);
+
+    is_running_ = 0;
 }
 
 
@@ -127,19 +157,27 @@ void debugger_t::start_without_debugger() {
 void debugger_t::start_and_break_at_main() {
     /* Check for WinMain as well */
     std::lock_guard<std::mutex> lock(shared_->ctx_mutex);
-    shared_->tasks[shared_->pending_task_count++] = new debugger_task_start_process_t();
+    shared_->tasks[shared_->pending_task_count++] = debugger_task_start_process;
+
+    is_running_ = true;
 }
 
 
 void debugger_t::step_over() {
+    std::lock_guard<std::mutex> lock(shared_->ctx_mutex);
+    shared_->tasks[shared_->pending_task_count++] = debugger_task_step_over;
 }
 
 
-void debugger_t::step_in() {
+void debugger_t::step_into() {
+    std::lock_guard<std::mutex> lock(shared_->ctx_mutex);
+    shared_->tasks[shared_->pending_task_count++] = debugger_task_step_into;
 }
 
 
 void debugger_t::step_out() {
+    std::lock_guard<std::mutex> lock(shared_->ctx_mutex);
+    shared_->tasks[shared_->pending_task_count++] = debugger_task_step_out;
 }
 
 
@@ -220,18 +258,40 @@ void debugger_t::handle_debug_event() {
             coords.mColumn = 0;
             coords.mLine = lvbh_data->line_number - 1;
             editor_.SetCursorPosition(coords);
+            editor_.SetCurrentLineStepping(lvbh_data->line_number - 1);
         } break;
         case LUET_SINGLE_ASM_STEP: {
 
         } break;
         case LUET_SOURCE_CODE_STEP_FINISHED: {
+            auto *data = (lgdb_user_event_source_code_step_finished_t *)ev->ev_data;
 
+            TextEditor::Coordinates coords;
+            coords.mColumn = 0;
+            coords.mLine = data->line_number - 1;
+
+            editor_.SetCursorPosition(coords);
+            editor_.SetCurrentLineStepping(data->line_number - 1);
         } break;
         case LUET_STEP_OUT_FUNCTION_FINISHED: {
+            auto *data = (lgdb_user_event_source_code_step_finished_t *)ev->ev_data;
 
+            TextEditor::Coordinates coords;
+            coords.mColumn = 0;
+            coords.mLine = data->line_number - 1;
+
+            editor_.SetCursorPosition(coords);
+            editor_.SetCurrentLineStepping(data->line_number - 1);
         } break;
         case LUET_STEP_IN_FUNCTION_FINISHED: {
+            auto *data = (lgdb_user_event_step_in_finished_t *)ev->ev_data;
 
+            TextEditor::Coordinates coords;
+            coords.mColumn = 0;
+            coords.mLine = data->line_number - 1;
+
+            editor_.SetCursorPosition(coords);
+            editor_.SetCurrentLineStepping(data->line_number - 1);
         } break;
 
         default: {
@@ -248,4 +308,9 @@ void debugger_t::copy_to_output_buffer(const char *buf) {
     uint32_t buf_len = strlen(buf);
     strcpy_s(output_buffer_ + output_buffer_counter_, output_buffer_max_ - output_buffer_counter_, buf);
     output_buffer_counter_ += buf_len;
+}
+
+
+bool debugger_t::is_process_running() {
+    return is_running_;
 }

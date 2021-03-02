@@ -46,6 +46,8 @@ void some_function(int a, int b, char *pointer) {
 }
 
 int main() {
+    printf("Hello Luc's Debugger!\n");
+
     my_enum_t my_thingy = ME_AM_AWESOME;
 
     void (*function_pointer)(int, int, char *) = some_function;

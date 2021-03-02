@@ -47,6 +47,7 @@ TextEditor::TextEditor()
 	, mHandleMouseInputs(true)
 	, mIgnoreImGuiChild(false)
 	, mShowWhitespaces(true)
+	, mCurrentSteppingLine(-1)
 	, mStartTime(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
 {
 	SetPalette(GetDarkPalette());
@@ -961,16 +962,22 @@ void TextEditor::Render()
 			auto lineNoWidth = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, buf, nullptr, nullptr).x;
 			drawList->AddText(ImVec2(lineStartScreenPos.x + mTextStart - lineNoWidth, lineStartScreenPos.y), mPalette[(int)PaletteIndex::LineNumber], buf);
 
+			if (mCurrentSteppingLine == lineNo) {
+                auto end = ImVec2(start.x + contentSize.x + scrollX, start.y + mCharAdvance.y);
+                drawList->AddRectFilled(start, end, mPalette[(int)(PaletteIndex::CurrentSteppingLine)]);
+                // drawList->AddRect(start, end, mPalette[(int)PaletteIndex::CurrentLineEdge], 0.0f);
+			}
+
 			if (mState.mCursorPosition.mLine == lineNo)
 			{
 				auto focused = ImGui::IsWindowFocused();
 
 				// Highlight the current line (where the cursor is)
-				if (!HasSelection())
+				if (!HasSelection() && mCurrentSteppingLine != lineNo)
 				{
 					auto end = ImVec2(start.x + contentSize.x + scrollX, start.y + mCharAdvance.y);
 					drawList->AddRectFilled(start, end, mPalette[(int)(focused ? PaletteIndex::CurrentLineFill : PaletteIndex::CurrentLineFillInactive)]);
-					drawList->AddRect(start, end, mPalette[(int)PaletteIndex::CurrentLineEdge], 1.0f);
+					drawList->AddRect(start, end, mPalette[(int)PaletteIndex::CurrentLineEdge], 0.0f);
 				}
 
 				// Render the cursor
@@ -2027,6 +2034,7 @@ const TextEditor::Palette & TextEditor::GetDarkPalette()
 			0x40000000, // Current line fill
 			0x40808080, // Current line fill (inactive)
 			0x40a0a0a0, // Current line edge
+			0x80408080
 		} };
 	return p;
 }
@@ -2055,6 +2063,7 @@ const TextEditor::Palette & TextEditor::GetLightPalette()
 			0x40000000, // Current line fill
 			0x40808080, // Current line fill (inactive)
 			0x40000000, // Current line edge
+			0x80804080
 		} };
 	return p;
 }
@@ -2083,6 +2092,7 @@ const TextEditor::Palette & TextEditor::GetRetroBluePalette()
 			0x40000000, // Current line fill
 			0x40808080, // Current line fill (inactive)
 			0x40000000, // Current line edge
+			0x80804080
 		} };
 	return p;
 }

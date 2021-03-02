@@ -70,4 +70,9 @@ typedef struct lgdb_user_event_step_in_finished {
     const char *file_name;
 } lgdb_user_event_step_in_finished_t;
 
+typedef struct lgdb_user_event_step_out_finished {
+    uint32_t line_number;
+    const char *file_name;
+} lgdb_user_event_step_out_finished_t;
+
 #endif

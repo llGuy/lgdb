@@ -33,6 +33,7 @@ private:
 
     ImGuiID tick_main_window();
     void tick_menubar();
+    void tick_debugging_keybindings();
 
 private:
 

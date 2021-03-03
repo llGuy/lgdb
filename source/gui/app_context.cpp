@@ -6,6 +6,7 @@
 
 #include <SDL.h>
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <GL/glew.h>
 #include <glm/glm.hpp>
 #include <imgui_impl_sdl.h>
@@ -147,11 +148,32 @@ ImGuiID app_context_t::tick_main_window() {
         ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse |
         ImGuiWindowFlags_NoBringToFrontOnFocus |
+        ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_MenuBar;
 
     ImGui::Begin("Main Window", NULL, flags);
 
-    ImGuiID dock_space_id = ImGui::GetID("HUD_DockSpace");
+    ImGuiID dock_space_id = ImGui::GetID("Main Dockspace");
+
+    static int initialised = 0;
+
+#if 1
+    if (!initialised) {
+        initialised = 1;
+        ImGui::DockBuilderRemoveNode(dock_space_id);
+        ImGui::DockBuilderAddNode(dock_space_id, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderSetNodeSize(dock_space_id, viewport->Size);
+
+        ImGuiID dock_main_id = dock_space_id;
+        debugger_->dock = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Up, 0.7f, NULL, &dock_main_id);
+        // ImGuiID right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 1.0f, NULL, &dock_main_id);
+
+        ImGui::DockBuilderDockWindow("Code", debugger_->dock);
+        ImGui::DockBuilderDockWindow("Output", dock_main_id);
+
+        // ImGui::DockBuilderFinish(dock_space_id);
+    }
+#endif
 
     ImGui::DockSpace(dock_space_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None | ImGuiDockNodeFlags_PassthruCentralNode);
 

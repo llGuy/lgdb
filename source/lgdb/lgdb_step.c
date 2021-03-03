@@ -14,7 +14,12 @@ static s_prepare_step(struct lgdb_process_ctx *ctx, bool32_t check_for_call) {
     IMAGEHLP_LINE64 current_line = lgdb_make_line_info_from_addr(ctx, (void *)ctx->thread_ctx.Rip);
     IMAGEHLP_LINE64 next_line = lgdb_get_next_line_info(ctx, current_line);
 
-    if (current_line.SizeOfStruct && next_line.SizeOfStruct) {
+    if (current_line.SizeOfStruct) {
+        if (next_line.LineNumber == current_line.LineNumber) {
+            /* Find a better fix for end of file situations */
+            next_line.Address = current_line.Address + 100;
+        }
+
         ctx->breakpoints.previous_line = current_line.LineNumber;
 
         size_t bytes_read;

@@ -45,7 +45,11 @@ void some_function(int a, int b, char *pointer) {
     printf("%d %d %p\n", a, b, pointer);
 }
 
+extern void lets_go_to_another_file();
+
 int main() {
+    lets_go_to_another_file();
+
     printf("Hello Luc's Debugger!\n");
 
     my_enum_t my_thingy = ME_AM_AWESOME;

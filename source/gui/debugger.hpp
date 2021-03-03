@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <mutex>
 #include <TextEditor.h>
+#include <unordered_map>
+#include <fstream>
 
 extern "C" {
 #include <lgdb_context.h>
@@ -50,6 +52,16 @@ void debugger_task_start_process(struct shared_t *shared);
 void debugger_task_step_over(struct shared_t *shared);
 void debugger_task_step_into(struct shared_t *shared);
 void debugger_task_step_out(struct shared_t *shared);
+void debugger_task_continue(struct shared_t *shared);
+
+
+struct source_file_t {
+    uint32_t file_path_hash;
+    std::ifstream stream;
+    // std::string contents;
+    std::string file_name;
+    TextEditor editor;
+};
 
 
 class debugger_t {
@@ -67,6 +79,7 @@ public:
     void step_over();
     void step_into();
     void step_out();
+    void continue_process();
 
     bool is_process_running();
 
@@ -76,18 +89,28 @@ private:
 
     void handle_debug_event();
     void copy_to_output_buffer(const char *buf);
+    source_file_t *update_text_editor_file(const char *file_name);
+    void restore_current_file();
 
 private:
 
     static char strdir_buffer[262];
 
+    // TextEditor editor_;
     open_panels_t open_panels_;
-    TextEditor editor_;
     char *output_buffer_;
     uint32_t output_buffer_counter_;
     uint32_t output_buffer_max_;
     std::thread loop_thread_;
     shared_t *shared_;
     bool is_running_;
+    std::unordered_map<uint32_t, uint32_t> source_file_map_;
+    std::vector<source_file_t *> source_files_;
+    int32_t current_src_file_idx_;
+    int32_t current_src_file_hash_;
+
+public:
+
+    ImGuiID dock;
 
 };

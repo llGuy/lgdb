@@ -15,6 +15,7 @@ extern "C" {
 #include <mutex>
 #include <fstream>
 #include <condition_variable>
+#include <imgui_internal.h>
 
 
 char debugger_t::strdir_buffer[262] = { 0 };
@@ -43,6 +44,12 @@ void debugger_task_step_into(shared_t *shared) {
 
 void debugger_task_step_out(shared_t *shared) {
     lgdb_step_out(shared->ctx);
+    lgdb_continue_process(shared->ctx);
+    shared->processing_events = 1;
+}
+
+
+void debugger_task_continue(shared_t *shared) {
     lgdb_continue_process(shared->ctx);
     shared->processing_events = 1;
 }
@@ -98,10 +105,7 @@ void debugger_t::init() {
     open_panels_.dissassembly = 1;
     open_panels_.output = 1;
 
-    editor_.SetText("");
-    editor_.SetShowWhitespaces(0);
-    editor_.SetColorizerEnable(0);
-    editor_.SetReadOnly(1);
+    source_files_.reserve(50);
 
     output_buffer_max_ = lgdb_megabytes(1);
     output_buffer_ = new char[output_buffer_max_];
@@ -115,6 +119,8 @@ void debugger_t::init() {
     loop_thread_ = std::thread(s_debugger_loop_proc, shared_);
 
     is_running_ = 0;
+
+    current_src_file_idx_ = -1;
 }
 
 
@@ -122,11 +128,24 @@ void debugger_t::tick(ImGuiID main) {
     handle_debug_event();
 
     ImGui::SetNextWindowDockID(main, ImGuiCond_FirstUseEver);
-    ImGui::Begin("Code");
 
-    if (open_panels_.code) {
-        editor_.Render("Code");
+
+    if (current_src_file_idx_ >= 0) {
+        for (uint32_t i = 0; i < source_files_.size(); ++i) {
+            source_file_t *src = source_files_[i];
+
+            if (ImGui::Begin(src->file_name.c_str())) {
+                src->editor.Render("Source");
+            }
+
+            ImGui::End();
+        }
     }
+    else {
+        ImGui::Begin("Code", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration);
+        ImGui::End();
+    }
+
 
     if (open_panels_.watch) {
 
@@ -141,8 +160,6 @@ void debugger_t::tick(ImGuiID main) {
         ImGui::Text(output_buffer_);
         ImGui::End();
     }
-
-    ImGui::End();
 }
 
 
@@ -181,6 +198,12 @@ void debugger_t::step_out() {
 }
 
 
+void debugger_t::continue_process() {
+    std::lock_guard<std::mutex> lock(shared_->ctx_mutex);
+    shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
+}
+
+
 /* Static */
 void debugger_t::open_file_proc(const char *filename, void *obj) {
     debugger_t *dbg = (debugger_t *)obj;
@@ -203,6 +226,68 @@ void debugger_t::open_file_proc(const char *filename, void *obj) {
     lgdb_open_process_context(dbg->shared_->ctx, strdir_buffer, strdir_buffer + directory_end + 2);
 
     OutputDebugStringA("Opened process\n");
+}
+
+
+source_file_t *debugger_t::update_text_editor_file(const char *file_name) {
+    uint32_t path_hash = lgdb_hash_string(file_name);
+
+    if (path_hash == current_src_file_hash_) {
+        uint32_t idx = source_file_map_.at(path_hash);
+        return source_files_[idx];
+    }
+    else {
+        restore_current_file();
+
+        auto it = source_file_map_.find(path_hash);
+        if (it == source_file_map_.end()) {
+            uint32_t path_len = strlen(file_name);
+
+            const char *file_name_start = file_name;
+
+            for (int32_t i = path_len - 1; i >= 0; --i) {
+                if (file_name[i] == '\\' || file_name[i] == '/') {
+                    file_name_start = &file_name[i] + 1;
+                    break;
+                }
+            }
+
+            /* Register new file */
+            source_file_t *src = new source_file_t{ path_hash, std::ifstream(file_name) };
+            src->file_name = std::string(file_name_start);
+
+            source_files_.push_back(src);
+            uint32_t idx = source_files_.size() - 1;
+            source_file_map_[path_hash] = idx;
+
+            std::string contents;
+
+            std::getline(src->stream, contents, '\0');
+
+            src->editor.SetShowWhitespaces(0);
+            src->editor.SetColorizerEnable(0);
+            src->editor.SetReadOnly(1);
+            src->editor.SetText(contents);
+
+            ImGui::DockBuilderDockWindow(src->file_name.c_str(), dock);
+
+            current_src_file_idx_ = idx;
+            current_src_file_hash_ = path_hash;
+
+            return src;
+        }
+        else {
+            uint32_t idx = source_file_map_[path_hash];
+            current_src_file_idx_ = idx;
+            current_src_file_hash_ = path_hash;
+
+            source_file_t *src = source_files_[idx];
+
+            ImGui::SetWindowFocus(src->file_name.c_str());
+
+            return source_files_[idx];
+        }
+    }
 }
 
 
@@ -240,6 +325,8 @@ void debugger_t::handle_debug_event() {
             /* Once a breakpoint was hit, don't block on wait */
             auto *lvbh_data = (lgdb_user_event_valid_breakpoint_hit_t *)ev->ev_data;
 
+            source_file_t *src_file = update_text_editor_file(lvbh_data->file_name);
+
             copy_to_output_buffer("Hit a breakpoint at: ");
             copy_to_output_buffer(lvbh_data->file_name);
 
@@ -248,17 +335,12 @@ void debugger_t::handle_debug_event() {
 
             copy_to_output_buffer(linenum);
 
-            std::ifstream is(lvbh_data->file_name);
-
-            std::string file_contents;
-            std::getline(is, file_contents, '\0');
-            editor_.SetText(file_contents);
-
             TextEditor::Coordinates coords;
             coords.mColumn = 0;
             coords.mLine = lvbh_data->line_number - 1;
-            editor_.SetCursorPosition(coords);
-            editor_.SetCurrentLineStepping(lvbh_data->line_number - 1);
+
+            src_file->editor.SetCursorPosition(coords);
+            src_file->editor.SetCurrentLineStepping(lvbh_data->line_number - 1);
         } break;
         case LUET_SINGLE_ASM_STEP: {
 
@@ -266,32 +348,38 @@ void debugger_t::handle_debug_event() {
         case LUET_SOURCE_CODE_STEP_FINISHED: {
             auto *data = (lgdb_user_event_source_code_step_finished_t *)ev->ev_data;
 
+            source_file_t *src_file = update_text_editor_file(data->file_name);
+
             TextEditor::Coordinates coords;
             coords.mColumn = 0;
             coords.mLine = data->line_number - 1;
 
-            editor_.SetCursorPosition(coords);
-            editor_.SetCurrentLineStepping(data->line_number - 1);
+            src_file->editor.SetCursorPosition(coords);
+            src_file->editor.SetCurrentLineStepping(data->line_number - 1);
         } break;
         case LUET_STEP_OUT_FUNCTION_FINISHED: {
             auto *data = (lgdb_user_event_source_code_step_finished_t *)ev->ev_data;
 
+            source_file_t *src_file = update_text_editor_file(data->file_name);
+
             TextEditor::Coordinates coords;
             coords.mColumn = 0;
             coords.mLine = data->line_number - 1;
 
-            editor_.SetCursorPosition(coords);
-            editor_.SetCurrentLineStepping(data->line_number - 1);
+            src_file->editor.SetCursorPosition(coords);
+            src_file->editor.SetCurrentLineStepping(data->line_number - 1);
         } break;
         case LUET_STEP_IN_FUNCTION_FINISHED: {
             auto *data = (lgdb_user_event_step_in_finished_t *)ev->ev_data;
 
+            source_file_t *src_file = update_text_editor_file(data->file_name);
+
             TextEditor::Coordinates coords;
             coords.mColumn = 0;
             coords.mLine = data->line_number - 1;
 
-            editor_.SetCursorPosition(coords);
-            editor_.SetCurrentLineStepping(data->line_number - 1);
+            src_file->editor.SetCursorPosition(coords);
+            src_file->editor.SetCurrentLineStepping(data->line_number - 1);
         } break;
 
         default: {
@@ -313,4 +401,11 @@ void debugger_t::copy_to_output_buffer(const char *buf) {
 
 bool debugger_t::is_process_running() {
     return is_running_;
+}
+
+
+void debugger_t::restore_current_file() {
+    if (current_src_file_idx_ >= 0) {
+        source_files_[current_src_file_idx_]->editor.SetCurrentLineStepping(-1);
+    }
 }

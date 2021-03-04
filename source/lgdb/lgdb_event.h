@@ -52,7 +52,13 @@ typedef struct lgdb_user_event {
     single step exceptions, which the debugger knows how to handle itself etc...
     These events won't affect the user and don't have a lgdb_user_event_t associated with them.
 */
-void lgdb_trigger_user_event(struct lgdb_process_ctx *ctx, uint32_t ev_type, void *ev_data, bool32_t required_input);
+void lgdb_trigger_user_event(struct lgdb_process_ctx *ctx, uint32_t ev_type, void *ev_data, bool32_t required_input/*, bool32_t stop*/);
+
+typedef struct lgdb_user_event_load_dll {
+    // Make sure to free this pointer
+    const char *path;
+    bool32_t symbols;
+} lgdb_user_event_load_dll_t;
 
 /* Data for each user event */
 typedef struct lgdb_user_event_valid_breakpoint_hit {

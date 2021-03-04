@@ -105,13 +105,19 @@ typedef struct lgdb_symbol {
     uint32_t sym_size;
     uint32_t type_index;
     /* In debuggee address space */
-    uint64_t start_addr;
+    uint64_t start_addr; // May be an offset
+    uint64_t real_addr;  // Real address
+
+    uint32_t flags;
+    uint32_t reg;
+
+    char *name;
 
     /* Pointer in debugger address space */
     void *debugger_bytes_ptr;
 } lgdb_symbol_t;
 
-typedef void (*lgdb_update_symbol_proc_t)(struct lgdb_process_ctx *ctx, const char *name, lgdb_symbol_t *sym);
+typedef void (*lgdb_update_symbol_proc_t)(struct lgdb_process_ctx *ctx, const char *name, lgdb_symbol_t *sym, void *obj);
 
 typedef struct lgdb_process_symbols {
     /* 
@@ -138,6 +144,7 @@ typedef struct lgdb_process_symbols {
     lgdb_linear_allocator_t copy_mem;
 
     lgdb_update_symbol_proc_t current_updt_sym_proc;
+    void *current_updt_sym_obj;
 } lgdb_process_symbols_t;
 
 /* Just some utility functions */
@@ -146,15 +153,17 @@ const char *lgdb_get_containing_file(struct lgdb_process_ctx *ctx, const char *s
 IMAGEHLP_LINE64 lgdb_make_line_info(struct lgdb_process_ctx *ctx, const char *file_name, uint32_t line_number);
 IMAGEHLP_LINE64 lgdb_make_line_info_from_addr(struct lgdb_process_ctx *ctx, void *addr);
 IMAGEHLP_LINE64 lgdb_get_next_line_info(struct lgdb_process_ctx *ctx, IMAGEHLP_LINE64 line);
-void lgdb_update_symbol_context(struct lgdb_process_ctx *ctx);
+uint64_t lgdb_update_symbol_context(struct lgdb_process_ctx *ctx);
 
 /* To deprecate!! */
 void lgdb_update_local_symbols_depr(struct lgdb_process_ctx *ctx);
 
-void lgdb_update_local_symbols(struct lgdb_process_ctx *ctx, lgdb_update_symbol_proc_t proc);
+void lgdb_update_local_symbols(struct lgdb_process_ctx *ctx, lgdb_update_symbol_proc_t proc, void *obj);
 
 lgdb_symbol_type_t *lgdb_get_type(struct lgdb_process_ctx *ctx, uint32_t type_index);
 lgdb_symbol_t *lgdb_get_registered_symbol(struct lgdb_process_ctx *ctx, const char *name);
 void lgdb_print_symbol_value(struct lgdb_process_ctx *ctx, const char *name);
+
+void *lgdb_get_real_symbol_address(struct lgdb_process_ctx *ctx, lgdb_symbol_t *sym);
 
 #endif

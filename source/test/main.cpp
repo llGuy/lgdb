@@ -47,7 +47,32 @@ void some_function(int a, int b, char *pointer) {
 
 extern void lets_go_to_another_file();
 
+int assembly_test(int first_arg, int second_arg) {
+    char buffer[] = "Here we are!";
+
+    int a = first_arg + 1;
+    int b = second_arg - 1;
+
+    return a * b;
+}
+
+
 int main() {
+    int a_variable = 12;
+    a_basic_structure_t stru = {};
+    my_enum_t en = ME_AM_SO_COOL;
+
+    {
+        int i = 0;
+        printf("%d\n", i);
+    }
+
+    int i = 12;
+    printf("%d\n", i);
+
+#if 0
+    int ret = assembly_test(5, 9);
+
     lets_go_to_another_file();
 
     printf("Hello Luc's Debugger!\n");
@@ -108,6 +133,9 @@ int main() {
     OutputDebugString("Hello debugger0\n");
 
     __debugbreak();
+
+#endif
+
 
     return 0;
 }

@@ -64,6 +64,23 @@ struct source_file_t {
 };
 
 
+/* May be a scope, or just a single variable, etc... */
+struct watch_frame_t {
+    /* 
+       If this is allocated in the variable_info_allocator:
+       - All the lgdb_symbol_t structures
+       - The sym name to ptr table
+    */
+
+    void *start_in_variable_info_allocator;
+
+    lgdb_symbol_t **symbol_ptr_pool_start;
+
+    uint64_t stack_frame;
+    uint32_t var_count;
+};
+
+
 class debugger_t {
 public:
     
@@ -84,6 +101,7 @@ public:
     bool is_process_running();
 
     static void open_file_proc(const char *filename, void *obj);
+    static void update_local_symbol(lgdb_process_ctx_t *ctx, const char *name, lgdb_symbol_t *sym, void *obj);
 
 private:
 
@@ -91,6 +109,7 @@ private:
     void copy_to_output_buffer(const char *buf);
     source_file_t *update_text_editor_file(const char *file_name);
     void restore_current_file();
+    void update_locals(lgdb_process_ctx_t *ctx);
 
 private:
 
@@ -108,6 +127,31 @@ private:
     std::vector<source_file_t *> source_files_;
     int32_t current_src_file_idx_;
     int32_t current_src_file_hash_;
+
+    uint64_t current_stack_frame_;
+    uint32_t current_watch_frame_idx_;
+    std::vector<watch_frame_t> watch_frames_;
+
+    std::unordered_map<uint32_t, lgdb_symbol_t *> sym_idx_to_ptr;
+
+    /* All registered types */
+    lgdb_table_t type_idx_to_ptr_;
+    /* Nevers gets cleared unless out of memory, or starting another process */
+    lgdb_linear_allocator_t type_mem_;
+
+    /* 
+       A contiguous list of pointers to variable information 
+       These pointers point to somewhere in the variable_info_allocator_
+    */
+    lgdb_symbol_t **symbol_ptr_pool_;
+    uint32_t symbol_ptr_count_;
+    uint32_t max_symbol_ptr_count_;
+    lgdb_linear_allocator_t variable_info_allocator_;
+
+    /* Contains a copy of the variables */
+    lgdb_linear_allocator_t variable_copy_allocator_;
+
+    bool creating_new_frame_;
 
 public:
 

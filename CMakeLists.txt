@@ -10,6 +10,7 @@ file(GLOB_RECURSE CLI_SOURCES "source/cli/*.cpp" "source/cli/*.hpp")
 file(GLOB_RECURSE GUI_SOURCES 
 	"source/gui/*.cpp" 
 	"source/gui/*.hpp" 
+	"dependencies/stb/*.h"
 	"dependencies/imgui/lib/*.cpp" 
 	"dependencies/imgui/include/*.h" 
 	"dependencies/editor/*.cpp" 
@@ -33,11 +34,13 @@ target_link_libraries(lgdbgui PUBLIC "lgdb"
 	"opengl32.lib" 
 	"user32.lib" 
 	"gdi32.lib" 
+	"shcore.lib"
 	"winmm.lib")
 target_include_directories(lgdbgui PUBLIC "${CMAKE_SOURCE_DIR}/dependencies/SDL/include/")
 target_include_directories(lgdbgui PUBLIC "${CMAKE_SOURCE_DIR}/dependencies/glew-2.1.0/include")
 target_include_directories(lgdbgui PUBLIC "${CMAKE_SOURCE_DIR}/dependencies/glm/")
 target_include_directories(lgdbgui PUBLIC "dependencies/imgui/include/")
+target_include_directories(lgdbgui PUBLIC "dependencies/stb/")
 target_include_directories(lgdbgui PUBLIC "dependencies/editor/")
 target_compile_definitions(lgdbgui PUBLIC GLEW_STATIC)
 

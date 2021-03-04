@@ -19,6 +19,7 @@ uint32_t lgdb_hash_string(const char *string);
 uint32_t lgdb_hash_buffer(const char *string, uint32_t length);
 uint32_t lgdb_hash_pointer(void *p);
 uint8_t lgdb_read_current_op_byte(struct lgdb_process_ctx *ctx, uint64_t pc, size_t *bytes_read);
+void lgdb_read_buffer_from_process(struct lgdb_process_ctx *ctx, uint64_t ptr, uint32_t size, void *dst);
 const char *lgdb_get_base_type_string(uint32_t base_type);
 
 #define WIN32_CALL(func, ...) \

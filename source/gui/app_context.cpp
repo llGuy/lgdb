@@ -8,9 +8,14 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <GL/glew.h>
+#include <windows.h>
 #include <glm/glm.hpp>
+#include <ShellScalingAPI.h>
+#include <comdef.h>
 #include <imgui_impl_sdl.h>
 #include <imgui_impl_opengl3.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
 
 void app_context_t::run(const char *cmdline) {
@@ -41,6 +46,8 @@ void app_context_t::init() {
     debugger_->init();
 
     is_running_ = 1;
+
+    debugger_t::open_file_proc("C:\\Users\\lucro\\Development\\lgdb\\build\\Debug\\lgdbtest.exe", debugger_);
 }
 
 
@@ -56,6 +63,8 @@ void app_context_t::init_imgui() {
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
+    // font_ = io.Fonts->AddFontFromFileTTF("SourceCodePro.ttf", 12.0f);
+
     ImGui::StyleColorsDark();
 
     ImGuiStyle &style = ImGui::GetStyle();
@@ -70,6 +79,8 @@ void app_context_t::init_imgui() {
 
 void app_context_t::init_window_ctx() {
     { // SDL
+        HRESULT hr = SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
+
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
             error_and_exit("Failed to initialise SDL\n");
 
@@ -88,6 +99,15 @@ void app_context_t::init_window_ctx() {
         gl_ctx_ = SDL_GL_CreateContext(window_);
         SDL_GL_MakeCurrent(window_, gl_ctx_);
         SDL_GL_SetSwapInterval(1);
+
+#if 0
+        SDL_Surface *surface;
+        int w, h, comp;
+        uint8_t *pixels = stbi_load("../resources/icon.png", &w, &h, &comp, STBI_rgb_alpha);
+
+        surface = SDL_CreateRGBSurfaceFrom(pixels, w, h,  16 * 4, 0x0f00, 0x00f0, 0x000f, 0xf000);
+#endif
+        
 
         if (glewInit() != GLEW_OK)
             error_and_exit("Failed to initialise GLEW\n");
@@ -118,10 +138,14 @@ void app_context_t::begin_frame() {
     ImGui_ImplSDL2_NewFrame(window_);
 
     ImGui::NewFrame();
+
+    // ImGui::PushFont(font_);
 }
 
 
 void app_context_t::end_frame() {
+    // ImGui::PopFont();
+
     ImGui::Render();
 
     ImGuiIO &io = ImGui::GetIO();
@@ -165,9 +189,11 @@ ImGuiID app_context_t::tick_main_window() {
         ImGui::DockBuilderSetNodeSize(dock_space_id, viewport->Size);
 
         ImGuiID dock_main_id = dock_space_id;
+        ImGuiID left = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.3f, NULL, &dock_main_id);
         debugger_->dock = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Up, 0.7f, NULL, &dock_main_id);
         // ImGuiID right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 1.0f, NULL, &dock_main_id);
 
+        ImGui::DockBuilderDockWindow("Watch", left);
         ImGui::DockBuilderDockWindow("Code", debugger_->dock);
         ImGui::DockBuilderDockWindow("Output", dock_main_id);
 

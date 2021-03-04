@@ -5,6 +5,7 @@ class file_dialog_t;
 class debugger_t;
 
 struct SDL_Window;
+struct ImFont;
 
 using SDL_GLContext = void *;
 using ImGuiID = unsigned int;
@@ -45,5 +46,7 @@ private:
 
     file_dialog_t *file_dialog_;
     debugger_t *debugger_;
+
+    ImFont *font_;
 
 };

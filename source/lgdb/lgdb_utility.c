@@ -234,3 +234,14 @@ const char *lgdb_get_base_type_string(uint32_t base_type) {
     default: return "";
     }
 }
+
+
+void lgdb_read_buffer_from_process(struct lgdb_process_ctx *ctx, uint64_t ptr, uint32_t size, void *dst) {
+    size_t bytes_read;
+    WIN32_CALL(ReadProcessMemory,
+        ctx->proc_info.hProcess,
+        (void *)ptr,
+        dst,
+        size,
+        &bytes_read);
+}

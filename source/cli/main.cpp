@@ -37,8 +37,9 @@ int main() {
     /* Initialise context of the debugging process */
     lgdb_process_ctx_t *debug_ctx = lgdb_create_context();
 
-#if 0
-    lgdb_process_ctx_t *debug_ctx = lgdb_create_context(
+#if 1
+    lgdb_open_process_context(
+        debug_ctx,
         "C:\\Users\\lucro\\Development\\lgdb\\build\\Debug\\",
         "lgdbtest.exe");
 #else
@@ -72,7 +73,7 @@ int main() {
                 /* In cases where execution has been suspended, and input is needed */
                 if (debug_ctx->require_input) {
                     lgdb_update_symbol_context(debug_ctx);
-                    // lgdb_update_local_symbols(debug_ctx);
+                    lgdb_update_local_symbols_depr(debug_ctx);
 
                     /* should_continue will be true if we need to  */
                     bool should_continue = false;

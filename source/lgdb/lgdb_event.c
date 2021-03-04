@@ -134,13 +134,22 @@ void lgdb_handle_load_dll_debug_event(struct lgdb_process_ctx *ctx) {
         base,
         &module);
 
+    lgdb_user_event_load_dll_t *data =
+        LGDB_LNMALLOC(&ctx->events, lgdb_user_event_load_dll_t, 1);
+    data->path = dll_name;
+    data->symbols = success && (module.SymType == SymPdb);
+
+    lgdb_trigger_user_event(ctx, LUET_LOAD_DLL, data, 0);
+
     // Check and notify
+#if 0
     if (success && module.SymType == SymPdb) {
         printf("symbols WERE loaded\n");
     }
     else {
         printf("symbols WERE NOT loaded\n");
     }
+#endif
 }
 
 

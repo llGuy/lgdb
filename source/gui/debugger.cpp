@@ -121,6 +121,17 @@ void debugger_t::init() {
     is_running_ = 0;
 
     current_src_file_idx_ = -1;
+
+    symbol_ptr_count_ = 0;
+    max_symbol_ptr_count_ = 500;
+    symbol_ptr_pool_ = new lgdb_symbol_t *[max_symbol_ptr_count_];
+
+    watch_frames_.reserve(30);
+
+    current_stack_frame_ = 0xFFFFFFFFFFFFFFFF;
+
+    variable_info_allocator_ = lgdb_create_linear_allocator(lgdb_megabytes(1));
+    variable_copy_allocator_ = lgdb_create_linear_allocator(lgdb_megabytes(1));
 }
 
 
@@ -128,7 +139,6 @@ void debugger_t::tick(ImGuiID main) {
     handle_debug_event();
 
     ImGui::SetNextWindowDockID(main, ImGuiCond_FirstUseEver);
-
 
     if (current_src_file_idx_ >= 0) {
         for (uint32_t i = 0; i < source_files_.size(); ++i) {
@@ -148,7 +158,17 @@ void debugger_t::tick(ImGuiID main) {
 
 
     if (open_panels_.watch) {
+        ImGui::Begin("Watch");
 
+        if (ImGui::CollapsingHeader("Locals")) {
+            ImGui::Text("We are in locals");
+            if (ImGui::TreeNode("Here is another thing")) {
+                ImGui::Text("Here is another node");
+                ImGui::TreePop();
+            }
+        }
+
+        ImGui::End();
     }
 
     if (open_panels_.dissassembly) {
@@ -298,28 +318,44 @@ void debugger_t::handle_debug_event() {
         case LUET_EXCEPTION: {
         } break;
         case LUET_CREATE_PROCESS: {
-            lgdb_continue_process(shared_->ctx);
+            // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
 
             copy_to_output_buffer("Created process\n");
         } break;
         case LUET_EXIT_PROCESS: {
-            lgdb_continue_process(shared_->ctx);
+            // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
         } break;
         case LUET_CREATE_THREAD: {
-            lgdb_continue_process(shared_->ctx);
-
+            // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
         } break;
         case LUET_EXIT_THREAD: {
-            lgdb_continue_process(shared_->ctx);
+            // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
         } break;
         case LUET_LOAD_DLL: {
-            lgdb_continue_process(shared_->ctx);
+#if 0
+            auto *data = (lgdb_user_event_load_dll_t *)ev->ev_data;
+
+            copy_to_output_buffer("Loaded DLL \"");
+            copy_to_output_buffer(data->path);
+            copy_to_output_buffer("\", ");
+
+            if (data->symbols) {
+                copy_to_output_buffer(" FOUND symbols\n");
+            }
+            else {
+                copy_to_output_buffer(" DID NOT FIND symbols\n");
+            }
+
+            free((void *)data->path);
+#endif
+
+            // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
         } break;
         case LUET_UNLOAD_DLL: {
-            lgdb_continue_process(shared_->ctx);
+            // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
         } break;
         case LUET_OUTPUT_DEBUG_STRING: {
-            lgdb_continue_process(shared_->ctx);
+            // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
         } break;
         case LUET_VALID_BREAKPOINT_HIT: {
             /* Once a breakpoint was hit, don't block on wait */
@@ -341,6 +377,8 @@ void debugger_t::handle_debug_event() {
 
             src_file->editor.SetCursorPosition(coords);
             src_file->editor.SetCurrentLineStepping(lvbh_data->line_number - 1);
+
+            update_locals(shared_->ctx);
         } break;
         case LUET_SINGLE_ASM_STEP: {
 
@@ -356,6 +394,8 @@ void debugger_t::handle_debug_event() {
 
             src_file->editor.SetCursorPosition(coords);
             src_file->editor.SetCurrentLineStepping(data->line_number - 1);
+
+            update_locals(shared_->ctx);
         } break;
         case LUET_STEP_OUT_FUNCTION_FINISHED: {
             auto *data = (lgdb_user_event_source_code_step_finished_t *)ev->ev_data;
@@ -368,6 +408,8 @@ void debugger_t::handle_debug_event() {
 
             src_file->editor.SetCursorPosition(coords);
             src_file->editor.SetCurrentLineStepping(data->line_number - 1);
+
+            update_locals(shared_->ctx);
         } break;
         case LUET_STEP_IN_FUNCTION_FINISHED: {
             auto *data = (lgdb_user_event_step_in_finished_t *)ev->ev_data;
@@ -380,10 +422,12 @@ void debugger_t::handle_debug_event() {
 
             src_file->editor.SetCursorPosition(coords);
             src_file->editor.SetCurrentLineStepping(data->line_number - 1);
+
+            update_locals(shared_->ctx);
         } break;
 
         default: {
-            lgdb_continue_process(shared_->ctx);
+            // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
         } break;
         }
     }
@@ -408,4 +452,100 @@ void debugger_t::restore_current_file() {
     if (current_src_file_idx_ >= 0) {
         source_files_[current_src_file_idx_]->editor.SetCurrentLineStepping(-1);
     }
+}
+
+
+/* Static */
+void debugger_t::update_local_symbol(
+    lgdb_process_ctx_t *ctx,
+    const char *name,
+    lgdb_symbol_t *sym,
+    void *obj) {
+    debugger_t *dbg = (debugger_t *)obj;
+
+    watch_frame_t *frame = &dbg->watch_frames_[dbg->current_watch_frame_idx_];
+
+    auto entry = dbg->sym_idx_to_ptr.find(sym->sym_index);
+
+    lgdb_symbol_t *symbol = NULL;
+    
+    if (entry == dbg->sym_idx_to_ptr.end()) {
+        // We need to allocate in variable info, etc...
+        symbol = (lgdb_symbol_t *)lgdb_lnmalloc(
+            &dbg->variable_info_allocator_,
+            sizeof(lgdb_symbol_t));
+
+        *symbol = *sym;
+
+        uint32_t name_len = strlen(name);
+        symbol->name = (char *)lgdb_lnmalloc(&dbg->variable_info_allocator_, (1 + name_len) * sizeof(char));
+        memcpy(symbol->name, name, name_len * sizeof(char));
+        symbol->name[name_len] = 0;
+
+        void *data = lgdb_lnmalloc(&dbg->variable_copy_allocator_, symbol->size);
+        symbol->debugger_bytes_ptr = data;
+
+        lgdb_read_buffer_from_process(
+            ctx,
+            (uint64_t)lgdb_get_real_symbol_address(ctx, symbol),
+            symbol->size,
+            symbol->debugger_bytes_ptr);
+
+        dbg->sym_idx_to_ptr.insert(std::make_pair(sym->sym_index, symbol));
+    }
+    else {
+        // This variabe is already registered
+        symbol = entry->second;
+
+        lgdb_read_buffer_from_process(
+            ctx,
+            (uint64_t)lgdb_get_real_symbol_address(ctx, symbol),
+            symbol->size,
+            symbol->debugger_bytes_ptr);
+    }
+
+    frame->symbol_ptr_pool_start[frame->var_count++] = symbol;
+}
+
+
+void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
+    uint64_t new_frame = lgdb_update_symbol_context(ctx);
+    watch_frame_t *watch_frame = NULL;
+
+    if (new_frame < current_stack_frame_) {
+        /* Remove all the variables from the unoredered map from the previous scope */
+
+        // We just called a function - push a new watch group
+        watch_frames_.push_back(watch_frame_t{});
+        current_watch_frame_idx_ = watch_frames_.size() - 1;
+
+        watch_frame = &watch_frames_[current_watch_frame_idx_];
+        watch_frame->stack_frame = new_frame;
+
+        if (watch_frames_.size() == 1) {
+            watch_frame->symbol_ptr_pool_start = symbol_ptr_pool_;
+        }
+        else {
+            /* Get previous frame and set the symbol_ptr_pool_start to that one + var_count */
+        }
+
+
+        watch_frame->start_in_variable_info_allocator = variable_info_allocator_.current;
+
+        current_stack_frame_ = new_frame;
+
+        creating_new_frame_ = true;
+    }
+    else if (new_frame > current_stack_frame_) {
+        /* Remove all the variables from the unoredered map from the previous scope */
+
+        // We just exited out of a function
+        current_stack_frame_ = new_frame;
+    }
+    else {
+        watch_frame = &watch_frames_[current_watch_frame_idx_];
+    }
+
+    watch_frame->var_count = 0;
+    lgdb_update_local_symbols(ctx, update_local_symbol, this);
 }

@@ -87,7 +87,7 @@ IMAGEHLP_LINE64 lgdb_get_next_line_info(struct lgdb_process_ctx *ctx, IMAGEHLP_L
 }
 
 
-void lgdb_update_symbol_context(struct lgdb_process_ctx *ctx) {
+uint64_t lgdb_update_symbol_context(struct lgdb_process_ctx *ctx) {
     STACKFRAME64 frame;
     lgdb_get_stack_frame(ctx, &frame);
 
@@ -100,6 +100,8 @@ void lgdb_update_symbol_context(struct lgdb_process_ctx *ctx) {
     };
 
     SymSetContext(ctx->proc_info.hProcess, &stack_frame, NULL);
+
+    return frame.AddrFrame.Offset;
 }
 
 
@@ -580,7 +582,8 @@ static uint32_t s_register_enum_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t
 
         uint32_t length = (uint32_t)wcslen(src_name);
         wchar_t *dst_name = LGDB_LNMALLOC(&ctx->symbols.type_mem, wchar_t, length + 1);
-        wcsncpy_s(dst_name, length, src_name, length);
+        // wcsncpy_s(dst_name, length, src_name, length);
+        memcpy(dst_name, src_name, length * sizeof(wchar_t));
         dst_name[length] = 0;
 
         VARIANT variant;
@@ -602,10 +605,10 @@ static uint32_t s_register_enum_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t
 }
 
 
-static void *s_get_real_sym_address(lgdb_process_ctx_t *ctx, PSYMBOL_INFO pSymInfo, lgdb_symbol_t *sym) {
+void *lgdb_get_real_symbol_address(struct lgdb_process_ctx *ctx, lgdb_symbol_t *sym) {
     uint64_t base;
-    if (pSymInfo->Flags & SYMFLAG_REGREL) {
-        switch (pSymInfo->Register) {
+    if (sym->flags & SYMFLAG_REGREL) {
+        switch (sym->reg) {
         case R_X64_RBP: {
             base = ctx->thread_ctx.Rbp;
         } break;
@@ -620,7 +623,7 @@ static void *s_get_real_sym_address(lgdb_process_ctx_t *ctx, PSYMBOL_INFO pSymIn
         } break;
         }
     }
-    else if (pSymInfo->Flags & SYMFLAG_REGISTER) {
+    else if (sym->flags & SYMFLAG_REGISTER) {
         /* Need to handle this when the time comes */
         assert(0);
     }
@@ -653,7 +656,7 @@ static BOOL s_update_symbols_depr(
         size_t bytes_read;
         WIN32_CALL(ReadProcessMemory,
             ctx->proc_info.hProcess,
-            s_get_real_sym_address(ctx, pSymInfo, sym),
+            lgdb_get_real_symbol_address(ctx, sym),
             sym->debugger_bytes_ptr,
             sym->size,
             &bytes_read);
@@ -667,12 +670,14 @@ static BOOL s_update_symbols_depr(
         new_sym->start_addr = pSymInfo->Address;
         new_sym->size = pSymInfo->Size;
         new_sym->sym_tag = pSymInfo->Tag;
+        new_sym->reg = pSymInfo->Register;
+        new_sym->flags = pSymInfo->Flags;
         new_sym->debugger_bytes_ptr = LGDB_LNMALLOC(&ctx->symbols.copy_mem, uint8_t, new_sym->size);
 
         size_t bytes_read;
         WIN32_CALL(ReadProcessMemory,
             ctx->proc_info.hProcess,
-            s_get_real_sym_address(ctx, pSymInfo, new_sym),
+            lgdb_get_real_symbol_address(ctx, new_sym),
             new_sym->debugger_bytes_ptr,
             new_sym->size,
             &bytes_read);
@@ -700,9 +705,12 @@ static BOOL s_update_symbols(
         .start_addr = pSymInfo->Address,
         .size = pSymInfo->Size,
         .sym_tag = pSymInfo->Tag,
-        .debugger_bytes_ptr = LGDB_LNMALLOC(&ctx->lnmem, uint8_t, pSymInfo->Size)
+        .flags = pSymInfo->Flags,
+        .reg = pSymInfo->Register,
+        // .debugger_bytes_ptr = LGDB_LNMALLOC(&ctx->lnmem, uint8_t, pSymInfo->Size)
     };
 
+#if 0
     size_t bytes_read;
     WIN32_CALL(ReadProcessMemory,
         ctx->proc_info.hProcess,
@@ -710,9 +718,10 @@ static BOOL s_update_symbols(
         new_sym.debugger_bytes_ptr,
         new_sym.size,
         &bytes_read);
+#endif
 
     assert(ctx->symbols.current_updt_sym_proc);
-    ctx->symbols.current_updt_sym_proc(ctx, pSymInfo->Name, &new_sym);
+    ctx->symbols.current_updt_sym_proc(ctx, pSymInfo->Name, &new_sym, ctx->symbols.current_updt_sym_obj);
 
     return 1;
 }
@@ -724,8 +733,9 @@ void lgdb_update_local_symbols_depr(struct lgdb_process_ctx *ctx) {
 }
 
 
-void lgdb_update_local_symbols(struct lgdb_process_ctx *ctx, lgdb_update_symbol_proc_t proc) {
+void lgdb_update_local_symbols(struct lgdb_process_ctx *ctx, lgdb_update_symbol_proc_t proc, void *obj) {
     ctx->symbols.current_updt_sym_proc = proc;
+    ctx->symbols.current_updt_sym_obj = obj;
     WIN32_CALL(SymEnumSymbols, ctx->proc_info.hProcess, 0, "*", s_update_symbols, ctx);
 }
 
@@ -912,7 +922,7 @@ void lgdb_print_symbol_value(struct lgdb_process_ctx *ctx, const char *name) {
         lgdb_symbol_type_t *type = (lgdb_symbol_type_t *)(*type_entry);
 
         /* Simply update the value(s) stored in the symbol */
-        s_print_data(ctx, sym->debugger_bytes_ptr, sym->size, type);
+        // s_print_data(ctx, sym->debugger_bytes_ptr, sym->size, type);
     }
     else {
         

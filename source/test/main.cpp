@@ -60,6 +60,8 @@ typedef int some_type_t;
 
 int main() {
 
+    int some_array[10] = {1, 2, 3, 4};
+
     some_type_t uint = 12;
 
     a_basic_structure_t s = {};

@@ -362,6 +362,39 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
 
             ImGui::TreePop();
         }
+
+        break;
+    };
+
+    case SymTagArrayType: {
+        lgdb_symbol_type_t *arrayed_type = lgdb_get_type(shared_->ctx, type->uinfo.array_type.type_index);
+
+        uint32_t element_count = size / arrayed_type->size;
+
+        char buffer[50] = {};
+        sprintf(buffer, "%s[%d]", arrayed_type->name, element_count);
+
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        bool opened_struct = ImGui::TreeNodeEx(sym_name, ImGuiTreeNodeFlags_SpanFullWidth);
+        ImGui::TableSetColumnIndex(1);
+        ImGui::TextDisabled("{...}");
+        ImGui::TableSetColumnIndex(2);
+        ImGui::TextUnformatted(buffer);
+        ImGui::TableSetColumnIndex(3);
+        ImGui::Text("%d", size);
+
+        if (opened_struct) {
+            for (uint32_t i = 0; i < element_count && i < 30; ++i) {
+                sprintf(buffer, "[%d]", i);
+                render_symbol_type_data(buffer, arrayed_type->name, (uint8_t *)address + arrayed_type->size * i, arrayed_type->size, arrayed_type);
+            }
+
+            ImGui::TreePop();
+        }
+
+        // return render_symbol_type_data(address, size, arrayed_type);
+        break;
     };
 
                       /*
@@ -369,11 +402,6 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
         return s_print_pointer_type(address, size, type);
     };
 
-    case SymTagArrayType: {
-        lgdb_symbol_type_t *arrayed_type = lgdb_get_type(ctx, type->uinfo.array_type.type_index);
-
-        return s_print_data(ctx, address, size, arrayed_type);
-    };
 
 
     case SymTagEnum: {

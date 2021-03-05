@@ -58,6 +58,15 @@ int assembly_test(int first_arg, int second_arg) {
 
 
 int main() {
+    int i = 12;
+
+    int b = i * assembly_test(i + 1, i - 1);
+
+    printf("%d\n", b);
+
+
+
+#if 0
     int a_variable = 12;
     a_basic_structure_t stru = {};
     my_enum_t en = ME_AM_SO_COOL;
@@ -70,7 +79,6 @@ int main() {
     int i = 12;
     printf("%d\n", i);
 
-#if 0
     int ret = assembly_test(5, 9);
 
     lets_go_to_another_file();
@@ -97,7 +105,6 @@ int main() {
     my_structure.some_array[3] = 'f';
     my_structure.some_array[4] = 0;
 
-#if 0
     int base_type = 12;
     uint32_t typedefed_type = 13;
 
@@ -110,7 +117,6 @@ int main() {
 
     first_variable += 12;
     second_variable /= 2.0f;
-#endif
 
     if (global_variable > 9) {
         __debugbreak();
@@ -133,7 +139,6 @@ int main() {
     OutputDebugString("Hello debugger0\n");
 
     __debugbreak();
-
 #endif
 
 

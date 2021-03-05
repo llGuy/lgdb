@@ -1,3 +1,4 @@
+#define _NO_CVCONST_H
 #include "debugger.hpp"
 
 
@@ -14,6 +15,8 @@ extern "C" {
 #include <string>
 #include <mutex>
 #include <fstream>
+#include <DbgHelp.h>
+#include <TypeInfoStructs.h>
 #include <condition_variable>
 #include <imgui_internal.h>
 
@@ -129,9 +132,12 @@ void debugger_t::init() {
     watch_frames_.reserve(30);
 
     current_stack_frame_ = 0xFFFFFFFFFFFFFFFF;
+    current_watch_frame_idx_ = -1;
 
     variable_info_allocator_ = lgdb_create_linear_allocator(lgdb_megabytes(1));
     variable_copy_allocator_ = lgdb_create_linear_allocator(lgdb_megabytes(1));
+
+    is_process_suspended_ = 0;
 }
 
 
@@ -156,16 +162,47 @@ void debugger_t::tick(ImGuiID main) {
         ImGui::End();
     }
 
-
     if (open_panels_.watch) {
         ImGui::Begin("Watch");
 
-        if (ImGui::CollapsingHeader("Locals")) {
-            ImGui::Text("We are in locals");
-            if (ImGui::TreeNode("Here is another thing")) {
-                ImGui::Text("Here is another node");
-                ImGui::TreePop();
+        if (ImGui::BeginTable("Watch", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
+
+            ImGui::TableSetupColumn("Name");
+            ImGui::TableSetupColumn("Value");
+            ImGui::TableSetupColumn("Type");
+            ImGui::TableSetupColumn("Size");
+            ImGui::TableHeadersRow();
+
+            if (current_watch_frame_idx_ >= 0 && is_process_suspended_) {
+                /* Locals */
+                ImGui::TableNextRow();
+                // ImGui::TableNextColumn();
+                ImGui::TableSetColumnIndex(0);
+                bool opened_locals = ImGui::TreeNodeEx("Locals", ImGuiTreeNodeFlags_SpanFullWidth);
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextDisabled("{...}");
+                ImGui::TableSetColumnIndex(2);
+                ImGui::TextUnformatted("--");
+                ImGui::TableSetColumnIndex(3);
+                ImGui::TextUnformatted("--");
+
+                if (opened_locals) {
+                    watch_frame_t *watch_frame = &watch_frames_[current_watch_frame_idx_];
+
+                    for (uint32_t i = 0; i < watch_frame->var_count; i++) {
+                        lgdb_symbol_t *sym = watch_frame->symbol_ptr_pool_start[i];
+
+                        render_symbol_type_data(sym->debugger_bytes_ptr, sym->size, lgdb_get_type(shared_->ctx, sym->type_index));
+
+                    }
+
+                    ImGui::TreePop();
+                }
             }
+
+            ImGui::EndTable();
+
+
         }
 
         ImGui::End();
@@ -179,6 +216,142 @@ void debugger_t::tick(ImGuiID main) {
         ImGui::Begin("Output", NULL, ImGuiWindowFlags_AlwaysVerticalScrollbar);
         ImGui::Text(output_buffer_);
         ImGui::End();
+    }
+}
+
+
+static int s_print_chars(char *address, uint32_t count, lgdb_symbol_type_t *type) {
+    printf("\'%c\'", address[0]);
+    for (uint32_t i = 1; i < count; ++i)
+        printf(", \'%c\'", address[i]);
+
+    return 1;
+}
+
+
+static int s_print_ints(int *address, uint32_t count, lgdb_symbol_type_t *type) {
+    printf("%d", address[0]);
+    for (uint32_t i = 1; i < count; ++i)
+        printf(", %d", address[i]);
+
+    return 1;
+}
+
+
+static int s_print_uints(unsigned int *address, uint32_t count, lgdb_symbol_type_t *type) {
+    printf("%u", address[0]);
+    for (uint32_t i = 1; i < count; ++i)
+        printf(", %u", address[i]);
+
+    return 1;
+}
+
+
+static int s_print_floats(float *address, uint32_t count, lgdb_symbol_type_t *type) {
+    printf("%f", address[0]);
+    for (uint32_t i = 1; i < count; ++i)
+        printf(", %f", address[i]);
+
+    return 1;
+}
+
+
+static int s_print_bools(uint8_t *address, uint32_t count, lgdb_symbol_type_t *type) {
+    printf("%s", address[0] ? "true" : "false");
+    for (uint32_t i = 1; i < count; ++i)
+        printf(", %s", address[i] ? "true" : "false");
+
+    return 1;
+}
+
+
+
+void debugger_t::render_symbol_base_type_data(void *address, uint32_t size, lgdb_symbol_type_t *type) {
+    const char *name = "base_type_test";
+
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+
+    ImGui::TreeNodeEx(name, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_Bullet | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanFullWidth);
+    ImGui::TableSetColumnIndex(1);
+
+    if (size / type->size == 1) {
+        switch (type->uinfo.base_type.base_type) {
+        case btChar: ImGui::Text("%c", *((char *)address)); break;
+            // case btWChar:
+        case btInt: ImGui::Text("%d", *((int *)address)); break;
+        case btUInt: ImGui::Text("%d", *((unsigned int *)address)); break;
+        case btFloat: ImGui::Text("%f", *((float *)address)); break;
+        case btBool: ImGui::Text("%s", *((bool *)address) ? "true" : "false"); break;
+        case btLong: ImGui::Text("%d", *((int *)address)); break;
+        case btULong: ImGui::Text("%d", *((unsigned int *)address)); break;
+        default: ImGui::Text("--"); break;
+        }
+    }
+    else {
+        ImGui::TextUnformatted("{...}");
+    }
+
+    ImGui::TableSetColumnIndex(2);
+    ImGui::Text("type");
+    ImGui::TableNextColumn();
+    ImGui::TableSetColumnIndex(3);
+    ImGui::Text("%d", size);
+}
+
+
+void debugger_t::render_symbol_type_data(void *address, uint32_t size, lgdb_symbol_type_t *type) {
+    switch (type->tag) {
+    case SymTagBaseType: render_symbol_base_type_data(address, size, type); break;
+
+        /*
+    case SymTagTypedef: {
+        lgdb_symbol_type_t *typedefed_type = lgdb_get_type(ctx, type->uinfo.typedef_type.type_index);
+
+        return s_print_data(ctx, address, size, typedefed_type);
+    };
+
+    case SymTagPointerType: {
+        return s_print_pointer_type(address, size, type);
+    };
+
+    case SymTagArrayType: {
+        lgdb_symbol_type_t *arrayed_type = lgdb_get_type(ctx, type->uinfo.array_type.type_index);
+
+        return s_print_data(ctx, address, size, arrayed_type);
+    };
+
+    case SymTagUDT: {
+        for (uint32_t i = 0; i < type->uinfo.udt_type.base_classes_count; ++i) {
+            lgdb_base_class_t *base_class = &type->uinfo.udt_type.base_classes_type_idx[i];
+
+            lgdb_symbol_type_t *base_class_type = lgdb_get_type(ctx, base_class->type_idx);
+
+            s_print_data(ctx, (uint8_t *)address + base_class->offset, base_class->size, base_class_type);
+
+            putchar('\n');
+        }
+        
+        for (uint32_t i = 0; i < type->uinfo.udt_type.member_var_count; ++i) {
+            lgdb_member_var_t *var = &type->uinfo.udt_type.member_vars_type_idx[i];
+
+            lgdb_symbol_type_t *member_type = lgdb_get_type(ctx, var->type_idx);
+
+            s_print_data(ctx, (uint8_t *)address + var->offset, var->size, member_type);
+
+            putchar('\n');
+        }
+
+        return 1;
+    };
+
+    case SymTagEnum: {
+        // lgdb_symbol_type_t *enum_type = lgdb_get_type(ctx, type->uinfo.enum_type.type_index);
+        return s_print_enum_type(address, size, type);
+    };
+                   */
+
+    default: {};
     }
 }
 
@@ -321,15 +494,19 @@ void debugger_t::handle_debug_event() {
             // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
 
             copy_to_output_buffer("Created process\n");
+            is_process_suspended_ = 0;
         } break;
         case LUET_EXIT_PROCESS: {
             // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
+            is_process_suspended_ = 0;
         } break;
         case LUET_CREATE_THREAD: {
             // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
+            is_process_suspended_ = 0;
         } break;
         case LUET_EXIT_THREAD: {
             // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
+            is_process_suspended_ = 0;
         } break;
         case LUET_LOAD_DLL: {
 #if 0
@@ -350,12 +527,15 @@ void debugger_t::handle_debug_event() {
 #endif
 
             // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
+            is_process_suspended_ = 0;
         } break;
         case LUET_UNLOAD_DLL: {
             // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
+            is_process_suspended_ = 0;
         } break;
         case LUET_OUTPUT_DEBUG_STRING: {
             // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
+            is_process_suspended_ = 0;
         } break;
         case LUET_VALID_BREAKPOINT_HIT: {
             /* Once a breakpoint was hit, don't block on wait */
@@ -379,9 +559,12 @@ void debugger_t::handle_debug_event() {
             src_file->editor.SetCurrentLineStepping(lvbh_data->line_number - 1);
 
             update_locals(shared_->ctx);
+
+            is_process_suspended_ = 1;
         } break;
         case LUET_SINGLE_ASM_STEP: {
 
+            is_process_suspended_ = 1;
         } break;
         case LUET_SOURCE_CODE_STEP_FINISHED: {
             auto *data = (lgdb_user_event_source_code_step_finished_t *)ev->ev_data;
@@ -396,6 +579,8 @@ void debugger_t::handle_debug_event() {
             src_file->editor.SetCurrentLineStepping(data->line_number - 1);
 
             update_locals(shared_->ctx);
+
+            is_process_suspended_ = 1;
         } break;
         case LUET_STEP_OUT_FUNCTION_FINISHED: {
             auto *data = (lgdb_user_event_source_code_step_finished_t *)ev->ev_data;
@@ -410,6 +595,8 @@ void debugger_t::handle_debug_event() {
             src_file->editor.SetCurrentLineStepping(data->line_number - 1);
 
             update_locals(shared_->ctx);
+
+            is_process_suspended_ = 1;
         } break;
         case LUET_STEP_IN_FUNCTION_FINISHED: {
             auto *data = (lgdb_user_event_step_in_finished_t *)ev->ev_data;
@@ -424,9 +611,12 @@ void debugger_t::handle_debug_event() {
             src_file->editor.SetCurrentLineStepping(data->line_number - 1);
 
             update_locals(shared_->ctx);
+
+            is_process_suspended_ = 1;
         } break;
 
         default: {
+            is_process_suspended_ = 0;
             // shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
         } break;
         }
@@ -482,6 +672,9 @@ void debugger_t::update_local_symbol(
         memcpy(symbol->name, name, name_len * sizeof(char));
         symbol->name[name_len] = 0;
 
+        /* Registers the type if it hasn't already been registered */
+        lgdb_get_type(ctx, symbol->type_index);
+
         void *data = lgdb_lnmalloc(&dbg->variable_copy_allocator_, symbol->size);
         symbol->debugger_bytes_ptr = data;
 
@@ -528,7 +721,6 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
         else {
             /* Get previous frame and set the symbol_ptr_pool_start to that one + var_count */
         }
-
 
         watch_frame->start_in_variable_info_allocator = variable_info_allocator_.current;
 

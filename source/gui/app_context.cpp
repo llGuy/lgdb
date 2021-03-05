@@ -17,11 +17,16 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+#define FPS 45
+
 
 void app_context_t::run(const char *cmdline) {
     init();
 
+    timeBeginPeriod(1);
     while (is_running_) {
+        uint32_t start = GetTickCount();
+
         begin_frame();
 
         /* Update and render */
@@ -30,7 +35,15 @@ void app_context_t::run(const char *cmdline) {
         debugger_->tick(main_window);
 
         end_frame();
+
+        uint32_t end_time = GetTickCount();
+        uint32_t delta = end_time - start;
+
+        if (delta < (1000 / FPS)) {
+            Sleep((1000 / FPS) - delta);
+        }
     }
+    timeEndPeriod(1);
 
     destroy();
 }
@@ -79,7 +92,7 @@ void app_context_t::init_imgui() {
 
 void app_context_t::init_window_ctx() {
     { // SDL
-        HRESULT hr = SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
+        // HRESULT hr = SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
 
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
             error_and_exit("Failed to initialise SDL\n");

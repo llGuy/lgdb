@@ -105,6 +105,8 @@ public:
 
 private:
 
+    void render_symbol_base_type_data(void *address, uint32_t size, lgdb_symbol_type_t *type);
+    void render_symbol_type_data(void *address, uint32_t size, lgdb_symbol_type_t *type);
     void handle_debug_event();
     void copy_to_output_buffer(const char *buf);
     source_file_t *update_text_editor_file(const char *file_name);
@@ -129,15 +131,10 @@ private:
     int32_t current_src_file_hash_;
 
     uint64_t current_stack_frame_;
-    uint32_t current_watch_frame_idx_;
+    int32_t current_watch_frame_idx_;
     std::vector<watch_frame_t> watch_frames_;
 
     std::unordered_map<uint32_t, lgdb_symbol_t *> sym_idx_to_ptr;
-
-    /* All registered types */
-    lgdb_table_t type_idx_to_ptr_;
-    /* Nevers gets cleared unless out of memory, or starting another process */
-    lgdb_linear_allocator_t type_mem_;
 
     /* 
        A contiguous list of pointers to variable information 
@@ -152,6 +149,7 @@ private:
     lgdb_linear_allocator_t variable_copy_allocator_;
 
     bool creating_new_frame_;
+    bool is_process_suspended_;
 
 public:
 

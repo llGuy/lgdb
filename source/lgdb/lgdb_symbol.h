@@ -36,6 +36,7 @@ typedef struct lgdb_member_var {
     uint32_t type_idx;
     uint32_t offset;
     uint32_t size;
+    char *name;
 } lgdb_member_var_t;
 
 /* Basically the same as lgdb_member_var_t... *sigh* */
@@ -84,6 +85,7 @@ typedef struct lgdb_symbol_type {
     uint32_t index;
     uint32_t tag;
     uint32_t size;
+    char *name;
 
     union {
         lgdb_symbol_enum_type_t enum_type;

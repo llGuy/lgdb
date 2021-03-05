@@ -7,6 +7,8 @@
 #include "lgdb_context.h"
 
 #include <stdbool.h>
+#include <string.h>
+#include <tchar.h>
 #include "TypeInfoStructs.h"
 
 
@@ -168,6 +170,7 @@ lgdb_symbol_type_t *lgdb_get_type(struct lgdb_process_ctx *ctx, uint32_t type_in
         lgdb_insert_in_table(&ctx->symbols.type_idx_to_ptr, type_index, (lgdb_entry_value_t)new_type);
 
         new_type->index = type_index;
+        new_type->name = NULL;
 
         /* Query some basic information, then get into meat of this type */
         uint32_t tag;
@@ -214,6 +217,32 @@ lgdb_symbol_type_t *lgdb_get_type(struct lgdb_process_ctx *ctx, uint32_t type_in
 }
 
 
+static char *s_get_sym_name(lgdb_process_ctx_t *ctx, uint32_t idx) {
+    wchar_t *unicode_name = NULL;
+    WIN32_CALL(
+        SymGetTypeInfo,
+        ctx->proc_info.hProcess,
+        ctx->process_pdb_base,
+        idx,
+        TI_GET_SYMNAME,
+        &unicode_name);
+
+    uint32_t len = wcslen(unicode_name);
+
+    char *name = LGDB_LNMALLOC(&ctx->symbols.type_mem, char, len + 1);
+
+    for (int i = 0; i < len; i++) {
+        name[i] = (char)unicode_name[i];
+    }
+
+    name[len] = 0;
+
+    LocalFree(unicode_name);
+
+    return name;
+}
+
+
 static uint32_t s_register_base_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type) {
     uint32_t base_type;
     WIN32_CALL(
@@ -224,12 +253,15 @@ static uint32_t s_register_base_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t
         TI_GET_BASETYPE,
         &base_type);
     type->uinfo.base_type.base_type = base_type;
+    type->name = NULL;
 
     return type->index;
 }
 
 
 static uint32_t s_register_typedef_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type) {
+    type->name = s_get_sym_name(ctx, type->index);
+
     uint32_t aliased_type;
     WIN32_CALL(
         SymGetTypeInfo,
@@ -302,6 +334,8 @@ static TI_FINDCHILDREN_PARAMS *s_find_children(lgdb_process_ctx_t *ctx, uint32_t
 
 
 static uint32_t s_register_udt_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type) {
+    type->name = s_get_sym_name(ctx, type->index);
+
     uint32_t children_count;
     TI_FINDCHILDREN_PARAMS *children_params = s_find_children(ctx, type->index, &children_count);
 
@@ -359,6 +393,7 @@ static uint32_t s_register_udt_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t 
             member_vars[member_vars_count].offset = offset;
             member_vars[member_vars_count].size = (uint32_t)length;
             member_vars[member_vars_count].sym_idx = children_params->ChildId[i];
+            member_vars[member_vars_count].name = s_get_sym_name(ctx, children_params->ChildId[i]);
             member_vars[member_vars_count++].type_idx = type_idx;
         }
         else if (tag == SymTagFunction) {
@@ -536,6 +571,8 @@ static uint32_t s_register_function_type(lgdb_process_ctx_t *ctx, lgdb_symbol_ty
 
 
 static uint32_t s_register_enum_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t *type) {
+    type->name = s_get_sym_name(ctx, type->index);
+
     uint32_t type_index;
     WIN32_CALL(
         SymGetTypeInfo,

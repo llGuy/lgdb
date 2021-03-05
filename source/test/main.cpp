@@ -56,14 +56,20 @@ int assembly_test(int first_arg, int second_arg) {
     return a * b;
 }
 
+typedef int some_type_t;
 
 int main() {
+
+    some_type_t uint = 12;
+
+    a_basic_structure_t s = {};
+    my_enum_t en = ME_AM_AWESOME;
+
     int i = 12;
 
     int b = i * assembly_test(i + 1, i - 1);
 
     printf("%d\n", b);
-
 
 
 #if 0

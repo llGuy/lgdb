@@ -105,8 +105,8 @@ public:
 
 private:
 
-    void render_symbol_base_type_data(void *address, uint32_t size, lgdb_symbol_type_t *type);
-    void render_symbol_type_data(void *address, uint32_t size, lgdb_symbol_type_t *type);
+    void render_symbol_base_type_data(const char *name, const char *type_name, void *address, uint32_t size, lgdb_symbol_type_t *type);
+    void render_symbol_type_data(const char *name, const char *type_name, void *address, uint32_t size, lgdb_symbol_type_t *type);
     void handle_debug_event();
     void copy_to_output_buffer(const char *buf);
     source_file_t *update_text_editor_file(const char *file_name);

@@ -192,8 +192,12 @@ void debugger_t::tick(ImGuiID main) {
                     for (uint32_t i = 0; i < watch_frame->var_count; i++) {
                         lgdb_symbol_t *sym = watch_frame->symbol_ptr_pool_start[i];
 
-                        render_symbol_type_data(sym->debugger_bytes_ptr, sym->size, lgdb_get_type(shared_->ctx, sym->type_index));
-
+                        render_symbol_type_data(
+                            sym->name,
+                            NULL,
+                            sym->debugger_bytes_ptr,
+                            sym->size,
+                            lgdb_get_type(shared_->ctx, sym->type_index));
                     }
 
                     ImGui::TreePop();
@@ -265,52 +269,102 @@ static int s_print_bools(uint8_t *address, uint32_t count, lgdb_symbol_type_t *t
 }
 
 
-
-void debugger_t::render_symbol_base_type_data(void *address, uint32_t size, lgdb_symbol_type_t *type) {
-    const char *name = "base_type_test";
+void debugger_t::render_symbol_base_type_data(const char *name, const char *type_name, void *address, uint32_t size, lgdb_symbol_type_t *type) {
+    const char *type_name_actual = type_name;
+    if (!type_name)
+        type_name_actual = lgdb_get_base_type_string(type->uinfo.base_type.base_type);
 
     ImGui::TableNextRow();
     ImGui::TableSetColumnIndex(0);
 
-    ImGui::TreeNodeEx(name, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_Bullet | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanFullWidth);
-    ImGui::TableSetColumnIndex(1);
+    uint32_t count = size / type->size;
 
-    if (size / type->size == 1) {
-        switch (type->uinfo.base_type.base_type) {
-        case btChar: ImGui::Text("%c", *((char *)address)); break;
-            // case btWChar:
-        case btInt: ImGui::Text("%d", *((int *)address)); break;
-        case btUInt: ImGui::Text("%d", *((unsigned int *)address)); break;
-        case btFloat: ImGui::Text("%f", *((float *)address)); break;
-        case btBool: ImGui::Text("%s", *((bool *)address) ? "true" : "false"); break;
-        case btLong: ImGui::Text("%d", *((int *)address)); break;
-        case btULong: ImGui::Text("%d", *((unsigned int *)address)); break;
-        default: ImGui::Text("--"); break;
+    if (count == 1) {
+        ImGui::TreeNodeEx(name, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_Bullet | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanFullWidth);
+        ImGui::TableSetColumnIndex(1);
+
+        if (size / type->size == 1) {
+            switch (type->uinfo.base_type.base_type) {
+            case btChar: ImGui::Text("\'%c\'", *((char *)address)); break;
+                // case btWChar:
+            case btInt: ImGui::Text("%d", *((int *)address)); break;
+            case btUInt: ImGui::Text("%d", *((unsigned int *)address)); break;
+            case btFloat: ImGui::Text("%f", *((float *)address)); break;
+            case btBool: ImGui::Text("%s", *((bool *)address) ? "true" : "false"); break;
+            case btLong: ImGui::Text("%d", *((int *)address)); break;
+            case btULong: ImGui::Text("%d", *((unsigned int *)address)); break;
+            default: ImGui::Text("--"); break;
+            }
         }
+        else {
+            ImGui::TextUnformatted("{...}");
+        }
+
+        ImGui::TableSetColumnIndex(2);
+        ImGui::Text(type_name_actual);
+        ImGui::TableNextColumn();
+        ImGui::TableSetColumnIndex(3);
+        ImGui::Text("%d", size);
     }
     else {
-        ImGui::TextUnformatted("{...}");
-    }
 
-    ImGui::TableSetColumnIndex(2);
-    ImGui::Text("type");
-    ImGui::TableNextColumn();
-    ImGui::TableSetColumnIndex(3);
-    ImGui::Text("%d", size);
+    }
 }
 
 
-void debugger_t::render_symbol_type_data(void *address, uint32_t size, lgdb_symbol_type_t *type) {
+void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_name, void *address, uint32_t size, lgdb_symbol_type_t *type) {
     switch (type->tag) {
-    case SymTagBaseType: render_symbol_base_type_data(address, size, type); break;
+    case SymTagBaseType: render_symbol_base_type_data(
+        sym_name,
+        type_name,
+        address,
+        size,
+        type); break;
 
-        /*
     case SymTagTypedef: {
-        lgdb_symbol_type_t *typedefed_type = lgdb_get_type(ctx, type->uinfo.typedef_type.type_index);
+        lgdb_symbol_type_t *typedefed_type = lgdb_get_type(shared_->ctx, type->uinfo.typedef_type.type_index);
 
-        return s_print_data(ctx, address, size, typedefed_type);
+        render_symbol_type_data(sym_name, type->name, address, size, typedefed_type);
+
+        break;
     };
 
+    case SymTagUDT: {
+#if 0
+        for (uint32_t i = 0; i < type->uinfo.udt_type.base_classes_count; ++i) {
+            lgdb_base_class_t *base_class = &type->uinfo.udt_type.base_classes_type_idx[i];
+
+            lgdb_symbol_type_t *base_class_type = lgdb_get_type(ctx, base_class->type_idx);
+
+            s_print_data(ctx, (uint8_t *)address + base_class->offset, base_class->size, base_class_type);
+
+            putchar('\n');
+        }
+#endif
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        bool opened_struct = ImGui::TreeNodeEx(sym_name, ImGuiTreeNodeFlags_SpanFullWidth);
+        ImGui::TableSetColumnIndex(1);
+        ImGui::TextDisabled("{...}");
+        ImGui::TableSetColumnIndex(2);
+        ImGui::TextUnformatted(type->name);
+        ImGui::TableSetColumnIndex(3);
+        ImGui::Text("%d", size);
+
+        if (opened_struct) {
+            for (uint32_t i = 0; i < type->uinfo.udt_type.member_var_count; ++i) {
+                lgdb_member_var_t *var = &type->uinfo.udt_type.member_vars_type_idx[i];
+
+                lgdb_symbol_type_t *member_type = lgdb_get_type(shared_->ctx, var->type_idx);
+
+                render_symbol_type_data(var->name, member_type->name, (uint8_t *)address + var->offset, var->size, member_type);
+            }
+
+            ImGui::TreePop();
+        }
+    };
+
+                      /*
     case SymTagPointerType: {
         return s_print_pointer_type(address, size, type);
     };
@@ -321,29 +375,6 @@ void debugger_t::render_symbol_type_data(void *address, uint32_t size, lgdb_symb
         return s_print_data(ctx, address, size, arrayed_type);
     };
 
-    case SymTagUDT: {
-        for (uint32_t i = 0; i < type->uinfo.udt_type.base_classes_count; ++i) {
-            lgdb_base_class_t *base_class = &type->uinfo.udt_type.base_classes_type_idx[i];
-
-            lgdb_symbol_type_t *base_class_type = lgdb_get_type(ctx, base_class->type_idx);
-
-            s_print_data(ctx, (uint8_t *)address + base_class->offset, base_class->size, base_class_type);
-
-            putchar('\n');
-        }
-        
-        for (uint32_t i = 0; i < type->uinfo.udt_type.member_var_count; ++i) {
-            lgdb_member_var_t *var = &type->uinfo.udt_type.member_vars_type_idx[i];
-
-            lgdb_symbol_type_t *member_type = lgdb_get_type(ctx, var->type_idx);
-
-            s_print_data(ctx, (uint8_t *)address + var->offset, var->size, member_type);
-
-            putchar('\n');
-        }
-
-        return 1;
-    };
 
     case SymTagEnum: {
         // lgdb_symbol_type_t *enum_type = lgdb_get_type(ctx, type->uinfo.enum_type.type_index);

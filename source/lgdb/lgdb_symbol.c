@@ -618,9 +618,10 @@ static uint32_t s_register_enum_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t
             &src_name);
 
         uint32_t length = (uint32_t)wcslen(src_name);
-        wchar_t *dst_name = LGDB_LNMALLOC(&ctx->symbols.type_mem, wchar_t, length + 1);
-        // wcsncpy_s(dst_name, length, src_name, length);
-        memcpy(dst_name, src_name, length * sizeof(wchar_t));
+        char *dst_name = LGDB_LNMALLOC(&ctx->symbols.type_mem, char, length + 1);
+        for (uint32_t i = 0; i < length; ++i) {
+            dst_name[i] = (char)src_name[i];
+        }
         dst_name[length] = 0;
 
         VARIANT variant;

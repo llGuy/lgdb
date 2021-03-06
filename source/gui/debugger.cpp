@@ -178,7 +178,7 @@ void debugger_t::tick(ImGuiID main) {
                 ImGui::TableNextRow();
                 // ImGui::TableNextColumn();
                 ImGui::TableSetColumnIndex(0);
-                bool opened_locals = ImGui::TreeNodeEx("Locals", ImGuiTreeNodeFlags_SpanFullWidth);
+                bool opened_locals = ImGui::TreeNodeEx("Locals", ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_DefaultOpen);
                 ImGui::TableSetColumnIndex(1);
                 ImGui::TextDisabled("{...}");
                 ImGui::TableSetColumnIndex(2);
@@ -312,6 +312,21 @@ void debugger_t::render_symbol_base_type_data(const char *name, const char *type
 }
 
 
+bool debugger_t::render_composed_var_row(const char *name, const char *type, uint32_t size) {
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    bool opened_struct = ImGui::TreeNodeEx(name, ImGuiTreeNodeFlags_SpanFullWidth);
+    ImGui::TableSetColumnIndex(1);
+    ImGui::TextDisabled("{...}");
+    ImGui::TableSetColumnIndex(2);
+    ImGui::TextUnformatted(type);
+    ImGui::TableSetColumnIndex(3);
+    ImGui::Text("%d", size);
+
+    return opened_struct;
+}
+
+
 void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_name, void *address, uint32_t size, lgdb_symbol_type_t *type) {
     switch (type->tag) {
     case SymTagBaseType: render_symbol_base_type_data(
@@ -323,40 +338,24 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
 
     case SymTagTypedef: {
         lgdb_symbol_type_t *typedefed_type = lgdb_get_type(shared_->ctx, type->uinfo.typedef_type.type_index);
-
         render_symbol_type_data(sym_name, type->name, address, size, typedefed_type);
 
         break;
     };
 
     case SymTagUDT: {
-#if 0
-        for (uint32_t i = 0; i < type->uinfo.udt_type.base_classes_count; ++i) {
-            lgdb_base_class_t *base_class = &type->uinfo.udt_type.base_classes_type_idx[i];
+        bool opened = render_composed_var_row(sym_name, type->name, size);
 
-            lgdb_symbol_type_t *base_class_type = lgdb_get_type(ctx, base_class->type_idx);
+        if (opened) {
+            for (uint32_t i = 0; i < type->uinfo.udt_type.base_classes_count; ++i) {
+                lgdb_base_class_t *base_class = &type->uinfo.udt_type.base_classes_type_idx[i];
+                lgdb_symbol_type_t *base_class_type = lgdb_get_type(shared_->ctx, base_class->type_idx);
+                render_symbol_type_data(base_class_type->name, base_class_type->name, (uint8_t *)address + base_class->offset, base_class->size, base_class_type);
+            }
 
-            s_print_data(ctx, (uint8_t *)address + base_class->offset, base_class->size, base_class_type);
-
-            putchar('\n');
-        }
-#endif
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        bool opened_struct = ImGui::TreeNodeEx(sym_name, ImGuiTreeNodeFlags_SpanFullWidth);
-        ImGui::TableSetColumnIndex(1);
-        ImGui::TextDisabled("{...}");
-        ImGui::TableSetColumnIndex(2);
-        ImGui::TextUnformatted(type->name);
-        ImGui::TableSetColumnIndex(3);
-        ImGui::Text("%d", size);
-
-        if (opened_struct) {
             for (uint32_t i = 0; i < type->uinfo.udt_type.member_var_count; ++i) {
                 lgdb_member_var_t *var = &type->uinfo.udt_type.member_vars_type_idx[i];
-
                 lgdb_symbol_type_t *member_type = lgdb_get_type(shared_->ctx, var->type_idx);
-
                 render_symbol_type_data(var->name, member_type->name, (uint8_t *)address + var->offset, var->size, member_type);
             }
 
@@ -371,20 +370,17 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
 
         uint32_t element_count = size / arrayed_type->size;
 
+        const char *arrayed_type_name = arrayed_type->name;
+        if (arrayed_type->tag == SymTagBaseType) {
+            arrayed_type_name = lgdb_get_base_type_string(arrayed_type->uinfo.base_type.base_type);
+        }
+
         char buffer[50] = {};
-        sprintf(buffer, "%s[%d]", arrayed_type->name, element_count);
+        sprintf(buffer, "%s[%d]", arrayed_type_name, element_count);
 
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        bool opened_struct = ImGui::TreeNodeEx(sym_name, ImGuiTreeNodeFlags_SpanFullWidth);
-        ImGui::TableSetColumnIndex(1);
-        ImGui::TextDisabled("{...}");
-        ImGui::TableSetColumnIndex(2);
-        ImGui::TextUnformatted(buffer);
-        ImGui::TableSetColumnIndex(3);
-        ImGui::Text("%d", size);
+        bool opened = render_composed_var_row(sym_name, buffer, size);
 
-        if (opened_struct) {
+        if (opened) {
             for (uint32_t i = 0; i < element_count && i < 30; ++i) {
                 sprintf(buffer, "[%d]", i);
                 render_symbol_type_data(buffer, arrayed_type->name, (uint8_t *)address + arrayed_type->size * i, arrayed_type->size, arrayed_type);
@@ -393,7 +389,43 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
             ImGui::TreePop();
         }
 
-        // return render_symbol_type_data(address, size, arrayed_type);
+        break;
+    };
+
+    case SymTagEnum: {
+        lgdb_symbol_type_t *enum_type = lgdb_get_type(shared_->ctx, type->uinfo.enum_type.type_index);
+
+        int32_t bytes;
+
+        switch (size) {
+        case 1: bytes = *(int8_t *)address; break;
+        case 2: bytes = *(int16_t *)address; break;
+        case 4: bytes = *(int32_t *)address; break;
+        default: {
+            assert(0);
+        } break;
+        }
+
+        lgdb_entry_value_t *entry = lgdb_get_from_table(&type->uinfo.enum_type.value_to_name, bytes);
+
+        char *enum_value_name = NULL;
+
+        if (entry) {
+            enum_value_name = (char *)*entry;
+        }
+        else {
+            enum_value_name = "__UNKNOWN_ENUM__";
+        }
+
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text("%s (%d)", enum_value_name, bytes);
+        ImGui::TableSetColumnIndex(2);
+        ImGui::TextUnformatted(type->name);
+        ImGui::TableSetColumnIndex(3);
+        ImGui::Text("%d", size);
+
         break;
     };
 
@@ -404,10 +436,6 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
 
 
 
-    case SymTagEnum: {
-        // lgdb_symbol_type_t *enum_type = lgdb_get_type(ctx, type->uinfo.enum_type.type_index);
-        return s_print_enum_type(address, size, type);
-    };
                    */
 
     default: {};

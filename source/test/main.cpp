@@ -60,6 +60,8 @@ typedef int some_type_t;
 
 int main() {
 
+    test_derived_class_t derived = {};
+
     int some_array[10] = {1, 2, 3, 4};
 
     some_type_t uint = 12;

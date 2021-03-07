@@ -419,6 +419,7 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
 
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
+        ImGui::Text("%s", sym_name);
         ImGui::TableSetColumnIndex(1);
         ImGui::Text("%s (%d)", enum_value_name, bytes);
         ImGui::TableSetColumnIndex(2);
@@ -797,9 +798,9 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
 
         // We just called a function - push a new watch group
         watch_frames_.push_back(watch_frame_t{});
-        current_watch_frame_idx_ = watch_frames_.size() - 1;
+        uint32_t new_watch_idx = watch_frames_.size() - 1;
 
-        watch_frame = &watch_frames_[current_watch_frame_idx_];
+        watch_frame = &watch_frames_[new_watch_idx];
         watch_frame->stack_frame = new_frame;
 
         if (watch_frames_.size() == 1) {
@@ -807,7 +808,11 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
         }
         else {
             /* Get previous frame and set the symbol_ptr_pool_start to that one + var_count */
+            watch_frame_t *previous_frame = &watch_frames_[current_watch_frame_idx_];
+            watch_frame->symbol_ptr_pool_start = previous_frame->symbol_ptr_pool_start + previous_frame->var_count;
         }
+
+        current_watch_frame_idx_ = watch_frames_.size() - 1;
 
         watch_frame->start_in_variable_info_allocator = variable_info_allocator_.current;
 
@@ -817,9 +822,18 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
     }
     else if (new_frame > current_stack_frame_) {
         /* Remove all the variables from the unoredered map from the previous scope */
+        watch_frame_t *previous_frame = &watch_frames_[current_watch_frame_idx_];
+        variable_info_allocator_.current = previous_frame->start_in_variable_info_allocator;
+
+        watch_frames_.pop_back();
 
         // We just exited out of a function
         current_stack_frame_ = new_frame;
+
+        if (watch_frames_.size())
+            current_watch_frame_idx_ = watch_frames_.size() - 1;
+
+        watch_frame = &watch_frames_[current_watch_frame_idx_];
     }
     else {
         watch_frame = &watch_frames_[current_watch_frame_idx_];

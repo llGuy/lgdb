@@ -47,6 +47,15 @@ void some_function(int a, int b, char *pointer) {
 
 extern void lets_go_to_another_file();
 
+struct function_return_t {
+    int a, b, c;
+    const char *my_string;
+};
+
+function_return_t return_a_struct() {
+    return function_return_t{2, 4, 3, "Hello world!"};
+}
+
 int assembly_test(int first_arg, int second_arg) {
     char buffer[] = "Here we are!";
 
@@ -59,6 +68,9 @@ int assembly_test(int first_arg, int second_arg) {
 typedef int some_type_t;
 
 int main() {
+
+    function_return_t ret = return_a_struct();
+    ret.a++;
 
     test_derived_class_t derived = {};
 

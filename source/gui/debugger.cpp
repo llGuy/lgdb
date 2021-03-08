@@ -147,6 +147,7 @@ void debugger_t::init() {
     variable_copy_allocator_ = lgdb_create_linear_allocator(lgdb_megabytes(1));
 
     is_process_suspended_ = 0;
+    changed_frame_ = 0;
 }
 
 
@@ -176,46 +177,67 @@ void debugger_t::tick(ImGuiID main) {
 
         if (ImGui::BeginTable("Watch", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
 
-            ImGui::TableSetupColumn("Name");
-            ImGui::TableSetupColumn("Value");
-            ImGui::TableSetupColumn("Type");
-            ImGui::TableSetupColumn("Size");
+            ImGui::TableSetupColumn("Name", 0, 0.3f);
+            ImGui::TableSetupColumn("Value", 0, 0.3f);
+            ImGui::TableSetupColumn("Type", 0, 0.3f);
+            ImGui::TableSetupColumn("Size", 0, 0.1f);
             ImGui::TableHeadersRow();
 
-            if (current_watch_frame_idx_ >= 0 && is_process_suspended_) {
-                /* Locals */
-                ImGui::TableNextRow();
-                // ImGui::TableNextColumn();
-                ImGui::TableSetColumnIndex(0);
-                bool opened_locals = ImGui::TreeNodeEx("Locals", ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_DefaultOpen);
-                ImGui::TableSetColumnIndex(1);
-                ImGui::TextDisabled("{...}");
-                ImGui::TableSetColumnIndex(2);
-                ImGui::TextUnformatted("--");
-                ImGui::TableSetColumnIndex(3);
-                ImGui::TextUnformatted("--");
+            if (is_process_suspended_) {
+                uint32_t call_stack_idx = 0;
+                for (int32_t i = watch_frames_.size() - 1; i >= 0; --i) {
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
 
-                if (opened_locals) {
-                    watch_frame_t *watch_frame = &watch_frames_[current_watch_frame_idx_];
+                    watch_frame_t *watch_frame = &watch_frames_[i];
 
-                    for (uint32_t i = 0; i < watch_frame->var_count; i++) {
-                        lgdb_symbol_t *sym = watch_frame->symbol_ptr_pool_start[i];
+                    bool opened;
+                    if (watch_frame->flags.is_stack_frame) {
+                        if (changed_frame_) {
+                            if (i == current_watch_frame_idx_) {
+                                ImGui::SetNextTreeNodeOpen(true);
+                            }
+                            else {
+                                ImGui::SetNextTreeNodeOpen(false);
+                            }
+                        }
 
-                        render_symbol_type_data(
-                            sym->name,
-                            NULL,
-                            sym->debugger_bytes_ptr,
-                            sym->size,
-                            lgdb_get_type(shared_->ctx, sym->type_index));
+                        opened = ImGui::TreeNodeEx(call_stack_[call_stack_idx].function_name.c_str(), ImGuiTreeNodeFlags_SpanFullWidth);
+
+                        ++call_stack_idx;
+                    }
+                    else {
+                        opened = ImGui::TreeNodeEx("Some watch", ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_DefaultOpen);
                     }
 
-                    ImGui::TreePop();
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::TextDisabled("{...}");
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::TextUnformatted("--");
+                    ImGui::TableSetColumnIndex(3);
+                    ImGui::TextUnformatted("--");
+
+                    if (opened) {
+
+                        for (uint32_t i = 0; i < watch_frame->var_count; i++) {
+                            lgdb_symbol_t *sym = watch_frame->symbol_ptr_pool_start[i];
+
+                            render_symbol_type_data(
+                                sym->name,
+                                NULL,
+                                sym->debugger_bytes_ptr,
+                                sym->size,
+                                lgdb_get_type(shared_->ctx, sym->type_index));
+                        }
+
+                        ImGui::TreePop();
+                    }
                 }
             }
 
             ImGui::EndTable();
 
-
+            changed_frame_ = false;
         }
 
         ImGui::End();
@@ -236,11 +258,11 @@ void debugger_t::tick(ImGuiID main) {
 
         if (ImGui::BeginTable("Watch", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
 
-            ImGui::TableSetupColumn("Address");
-            ImGui::TableSetupColumn("Function");
-            ImGui::TableSetupColumn("Module");
-            ImGui::TableSetupColumn("File Name");
-            ImGui::TableSetupColumn("Line Number");
+            ImGui::TableSetupColumn("Address", 0.1f);
+            ImGui::TableSetupColumn("Function", 0.25f);
+            ImGui::TableSetupColumn("Module", 0.3f);
+            ImGui::TableSetupColumn("File Name", 0.3f);
+            ImGui::TableSetupColumn("Line Number", 0.05f);
             ImGui::TableHeadersRow();
 
             for (auto frame : call_stack_) {
@@ -892,6 +914,7 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
 
         watch_frame = &watch_frames_[new_watch_idx];
         watch_frame->stack_frame = new_frame;
+        watch_frame->flags.is_stack_frame = 1;
 
         if (watch_frames_.size() == 1) {
             watch_frame->symbol_ptr_pool_start = symbol_ptr_pool_;
@@ -909,6 +932,7 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
         current_stack_frame_ = new_frame;
 
         creating_new_frame_ = true;
+        changed_frame_ = true;
     }
     else if (new_frame > current_stack_frame_) {
         /* Remove all the variables from the unoredered map from the previous scope */
@@ -924,9 +948,11 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
             current_watch_frame_idx_ = watch_frames_.size() - 1;
 
         watch_frame = &watch_frames_[current_watch_frame_idx_];
+        changed_frame_ = true;
     }
     else {
         watch_frame = &watch_frames_[current_watch_frame_idx_];
+        changed_frame_ = false;
     }
 
     watch_frame->var_count = 0;

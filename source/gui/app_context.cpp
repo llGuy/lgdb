@@ -203,13 +203,14 @@ ImGuiID app_context_t::tick_main_window() {
 
         ImGuiID dock_main_id = dock_space_id;
         ImGuiID left = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.5f, NULL, &dock_main_id);
-        debugger_->dock = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Up, 0.7f, NULL, &dock_main_id);
+        ImGuiID left_split = ImGui::DockBuilderSplitNode(left, ImGuiDir_Up, 0.7f, NULL, &left);
+        debugger_->dock = dock_main_id;
         // ImGuiID right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 1.0f, NULL, &dock_main_id);
 
-        ImGui::DockBuilderDockWindow("Watch", left);
+        ImGui::DockBuilderDockWindow("Watch", left_split);
         ImGui::DockBuilderDockWindow("Code", debugger_->dock);
-        ImGui::DockBuilderDockWindow("Call Stack", dock_main_id);
-        ImGui::DockBuilderDockWindow("Output", dock_main_id);
+        ImGui::DockBuilderDockWindow("Call Stack", left);
+        ImGui::DockBuilderDockWindow("Output", left);
 
         // ImGui::DockBuilderFinish(dock_space_id);
     }

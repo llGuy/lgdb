@@ -96,6 +96,10 @@ struct watch_frame_t {
 
     uint64_t stack_frame;
     uint32_t var_count;
+
+    struct {
+        uint32_t is_stack_frame : 1;
+    } flags;
 };
 
 
@@ -175,6 +179,7 @@ private:
     bool is_process_suspended_;
 
     std::vector<call_stack_frame_t> call_stack_;
+    bool changed_frame_;
 
 public:
 

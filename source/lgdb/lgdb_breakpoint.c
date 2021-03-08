@@ -55,8 +55,15 @@ void lgdb_flush_pending_breakpoints(struct lgdb_process_ctx *ctx) {
         switch (pend->called_function) {
 
         case LPBT_ADD_BREAKPOINTP: {
-            IMAGEHLP_SYMBOL64 *symbol = lgdb_make_symbol_info(ctx, pend->p.function_name);
-            breakpoint->addr = symbol->Address;
+            const char *func_name = pend->p.function_name;
+            if (func_name) {
+                IMAGEHLP_SYMBOL64 *symbol = lgdb_make_symbol_info(ctx, func_name);
+                breakpoint->addr = symbol->Address;
+            }
+            else {
+                func_name = ctx->entry_point.function_name;
+                breakpoint->addr = ctx->entry_point.address;
+            }
 
             /* TODO: Figure out what to do before freeing the symbol structure */
         } break;

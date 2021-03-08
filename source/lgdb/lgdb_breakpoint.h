@@ -82,6 +82,8 @@ typedef struct lgdb_breakpoints {
 /* 
     Pushes them to the pending list and will actually be added to the binary at lgdb_continue_process 
     Use this if you wish to add breakpoints before the process begins!
+
+    NOTE: Pass NULL as function_name to break at the entry point
 */
 void lgdb_add_breakpointp(struct lgdb_process_ctx *ctx, const char *function_name);
 void lgdb_add_breakpointfl(struct lgdb_process_ctx *ctx, const char *file_name, uint32_t line_number);

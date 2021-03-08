@@ -13,6 +13,11 @@
 #include "lgdb_breakpoint.h"
 #include "lgdb_call_stack.h"
 
+typedef struct lgdb_entry_point {
+    const char *function_name;
+    uint64_t address;
+} lgdb_entry_point_t;
+
 typedef struct lgdb_process_ctx {
     PROCESS_INFORMATION proc_info;
     DEBUG_EVENT current_event;
@@ -28,6 +33,7 @@ typedef struct lgdb_process_ctx {
     lgdb_call_stack_t call_stack;
     lgdb_dissasm_t dissasm;
     lgdb_linear_allocator_t lnmem;
+    lgdb_entry_point_t entry_point;
 
     lgdb_linear_allocator_t events;
     lgdb_user_event_t *event_head;
@@ -49,6 +55,7 @@ typedef struct lgdb_process_ctx {
             uint32_t triggered_user_event : 1;
             uint32_t require_input : 1;
             uint32_t block_on_wait : 1;
+            uint32_t load_call_stack_past_entry_point : 1;
         };
     };
 } lgdb_process_ctx_t;
@@ -72,5 +79,6 @@ void lgdb_continue_process(lgdb_process_ctx_t *ctx);
 BOOL lgdb_retrieve_thread_context(lgdb_process_ctx_t *ctx);
 void lgdb_sync_process_thread_context(lgdb_process_ctx_t *ctx);
 void lgdb_print_diagnostics(lgdb_process_ctx_t *ctx);
+lgdb_entry_point_t lgdb_find_entry_point(lgdb_process_ctx_t *ctx);
 
 #endif

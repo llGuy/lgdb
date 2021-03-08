@@ -25,6 +25,7 @@ struct open_panels_t {
             uint8_t memory : 1;
             uint8_t breakpoints : 1;
             uint8_t output : 1;
+            uint8_t call_stack : 1;
         };
         uint8_t bits;
     };
@@ -45,6 +46,13 @@ struct shared_t {
     debugger_task_t tasks[MAX_TASK_COUNT];
 
     lgdb_process_ctx_t *ctx;
+
+    union {
+        struct {
+            const char *file_name;
+            int32_t line_number;
+        } toggle_breakpoint;
+    } task_parameters;
 };
 
 
@@ -53,6 +61,7 @@ void debugger_task_step_over(struct shared_t *shared);
 void debugger_task_step_into(struct shared_t *shared);
 void debugger_task_step_out(struct shared_t *shared);
 void debugger_task_continue(struct shared_t *shared);
+void debugger_task_toggle_breakpoint(struct shared_t *shared);
 
 
 struct source_file_t {
@@ -61,6 +70,15 @@ struct source_file_t {
     // std::string contents;
     std::string file_name;
     TextEditor editor;
+};
+
+
+struct call_stack_frame_t {
+    uint64_t addr;
+    std::string function_name;
+    std::string file_name;
+    std::string module_name;
+    int32_t line_number;
 };
 
 
@@ -96,12 +114,14 @@ public:
     void step_over();
     void step_into();
     void step_out();
+    void toggle_breakpoint(const char *file_name, int line);
     void continue_process();
 
     bool is_process_running();
 
     static void open_file_proc(const char *filename, void *obj);
     static void update_local_symbol(lgdb_process_ctx_t *ctx, const char *name, lgdb_symbol_t *sym, void *obj);
+    static void update_call_stack(lgdb_process_ctx_t *ctx, void *obj, lgdb_call_stack_frame_t *frame);
 
 private:
 
@@ -114,6 +134,7 @@ private:
     source_file_t *update_text_editor_file(const char *file_name);
     void restore_current_file();
     void update_locals(lgdb_process_ctx_t *ctx);
+    void update_call_stack();
 
 private:
 
@@ -152,6 +173,8 @@ private:
 
     bool creating_new_frame_;
     bool is_process_suspended_;
+
+    std::vector<call_stack_frame_t> call_stack_;
 
 public:
 

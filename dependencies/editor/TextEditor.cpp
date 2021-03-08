@@ -2029,7 +2029,7 @@ const TextEditor::Palette & TextEditor::GetDarkPalette()
 			0xffe0e0e0, // Cursor
 			0x80a06020, // Selection
 			0x800020ff, // ErrorMarker
-			0x40f08000, // Breakpoint
+			0xee111170, // Breakpoint
 			0xff707000, // Line number
 			0x40000000, // Current line fill
 			0x40808080, // Current line fill (inactive)

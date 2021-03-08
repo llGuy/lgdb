@@ -117,6 +117,8 @@ typedef struct lgdb_symbol {
 
     /* Pointer in debugger address space */
     void *debugger_bytes_ptr;
+    /* User is free to use these flags */
+    uint32_t user_flags;
 } lgdb_symbol_t;
 
 typedef void (*lgdb_update_symbol_proc_t)(struct lgdb_process_ctx *ctx, const char *name, lgdb_symbol_t *sym, void *obj);

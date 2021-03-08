@@ -25,7 +25,7 @@ char debugger_t::strdir_buffer[262] = { 0 };
 
 
 void debugger_task_start_process(shared_t *shared) {
-    lgdb_add_breakpointp(shared->ctx, "main");
+    lgdb_add_breakpointp(shared->ctx, NULL); // Find entry point
     lgdb_begin_process(shared->ctx);
     shared->processing_events = 1;
 }
@@ -55,6 +55,14 @@ void debugger_task_step_out(shared_t *shared) {
 void debugger_task_continue(shared_t *shared) {
     lgdb_continue_process(shared->ctx);
     shared->processing_events = 1;
+}
+
+
+void debugger_task_toggle_breakpoint(shared_t *shared) {
+    lgdb_add_breakpointfl(
+        shared->ctx,
+        shared->task_parameters.toggle_breakpoint.file_name,
+        shared->task_parameters.toggle_breakpoint.line_number);
 }
 
 
@@ -105,6 +113,7 @@ void debugger_t::init() {
     open_panels_.bits = 0;
     open_panels_.code = 1;
     open_panels_.watch = 1;
+    open_panels_.call_stack = 1;
     open_panels_.dissassembly = 1;
     open_panels_.output = 1;
 
@@ -221,51 +230,51 @@ void debugger_t::tick(ImGuiID main) {
         ImGui::Text(output_buffer_);
         ImGui::End();
     }
-}
 
+    if (open_panels_.call_stack) {
+        ImGui::Begin("Call Stack");
 
-static int s_print_chars(char *address, uint32_t count, lgdb_symbol_type_t *type) {
-    printf("\'%c\'", address[0]);
-    for (uint32_t i = 1; i < count; ++i)
-        printf(", \'%c\'", address[i]);
+        if (ImGui::BeginTable("Watch", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
 
-    return 1;
-}
+            ImGui::TableSetupColumn("Address");
+            ImGui::TableSetupColumn("Function");
+            ImGui::TableSetupColumn("Module");
+            ImGui::TableSetupColumn("File Name");
+            ImGui::TableSetupColumn("Line Number");
+            ImGui::TableHeadersRow();
 
+            for (auto frame : call_stack_) {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("%p", (void *)frame.addr);
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text(frame.function_name.c_str());
+                ImGui::TableSetColumnIndex(2);
+                ImGui::Text(frame.module_name.c_str());
+                ImGui::TableSetColumnIndex(3);
+                ImGui::Text(frame.file_name.c_str());
+                ImGui::TableSetColumnIndex(4);
+                ImGui::Text("%d", frame.line_number);
+            }
 
-static int s_print_ints(int *address, uint32_t count, lgdb_symbol_type_t *type) {
-    printf("%d", address[0]);
-    for (uint32_t i = 1; i < count; ++i)
-        printf(", %d", address[i]);
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("[Mystical External Code]");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("--");
+            ImGui::TableSetColumnIndex(2);
+            ImGui::Text("--");
+            ImGui::TableSetColumnIndex(3);
+            ImGui::Text("--");
+            ImGui::TableSetColumnIndex(4);
+            ImGui::Text("--");
 
-    return 1;
-}
+            ImGui::EndTable();
 
-
-static int s_print_uints(unsigned int *address, uint32_t count, lgdb_symbol_type_t *type) {
-    printf("%u", address[0]);
-    for (uint32_t i = 1; i < count; ++i)
-        printf(", %u", address[i]);
-
-    return 1;
-}
-
-
-static int s_print_floats(float *address, uint32_t count, lgdb_symbol_type_t *type) {
-    printf("%f", address[0]);
-    for (uint32_t i = 1; i < count; ++i)
-        printf(", %f", address[i]);
-
-    return 1;
-}
-
-
-static int s_print_bools(uint8_t *address, uint32_t count, lgdb_symbol_type_t *type) {
-    printf("%s", address[0] ? "true" : "false");
-    for (uint32_t i = 1; i < count; ++i)
-        printf(", %s", address[i] ? "true" : "false");
-
-    return 1;
+        }
+        
+        ImGui::End();
+    }
 }
 
 
@@ -307,7 +316,7 @@ void debugger_t::render_symbol_base_type_data(const char *name, const char *type
         ImGui::Text("%d", size);
     }
     else {
-
+        assert(0);
     }
 }
 
@@ -316,6 +325,18 @@ bool debugger_t::render_composed_var_row(const char *name, const char *type, uin
     ImGui::TableNextRow();
     ImGui::TableSetColumnIndex(0);
     bool opened_struct = ImGui::TreeNodeEx(name, ImGuiTreeNodeFlags_SpanFullWidth);
+
+    if (ImGui::BeginPopupContextItem(NULL)) {
+        if (ImGui::Selectable("Something Cool")) {
+            ImGui::CloseCurrentPopup();
+        }
+        if (ImGui::Selectable("Something not cool")) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
     ImGui::TableSetColumnIndex(1);
     ImGui::TextDisabled("{...}");
     ImGui::TableSetColumnIndex(2);
@@ -419,7 +440,7 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
 
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
-        ImGui::Text("%s", sym_name);
+        ImGui::TreeNodeEx(sym_name, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_Bullet | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanFullWidth);
         ImGui::TableSetColumnIndex(1);
         ImGui::Text("%s (%d)", enum_value_name, bytes);
         ImGui::TableSetColumnIndex(2);
@@ -435,7 +456,7 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
 
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
-        ImGui::Text("%s", sym_name);
+        ImGui::TreeNodeEx(sym_name, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_Bullet | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanFullWidth);
         ImGui::TableSetColumnIndex(1);
         ImGui::Text("%p", *(void **)address);
         ImGui::TableSetColumnIndex(2);
@@ -490,9 +511,49 @@ void debugger_t::step_out() {
 }
 
 
+void debugger_t::toggle_breakpoint(const char *filename, int line) {
+    if (current_src_file_idx_ >= 0) {
+        std::lock_guard<std::mutex> lock(shared_->ctx_mutex);
+        shared_->tasks[shared_->pending_task_count++] = debugger_task_toggle_breakpoint;
+
+        // Add it in the text editor breakpoint list
+        source_file_t *src_file = source_files_[current_src_file_idx_];
+        auto coords = src_file->editor.GetCursorPosition();
+
+        shared_->task_parameters.toggle_breakpoint.file_name = src_file->file_name.c_str();
+        shared_->task_parameters.toggle_breakpoint.line_number = coords.mLine + 1;
+
+        TextEditor::Breakpoints &breakpoints = src_file->editor.GetBreakpoints();
+        
+        auto it = breakpoints.find(coords.mLine + 1);
+        if (it == breakpoints.end()) {
+            breakpoints.insert(coords.mLine + 1);
+        }
+    }
+}
+
+
 void debugger_t::continue_process() {
     std::lock_guard<std::mutex> lock(shared_->ctx_mutex);
     shared_->tasks[shared_->pending_task_count++] = debugger_task_continue;
+
+    if (current_src_file_idx_ >= 0) {
+        source_file_t *src_file = source_files_[current_src_file_idx_];
+        src_file->editor.SetCurrentLineStepping(-1);
+    }
+}
+
+
+static const char *remove_path(const char *path) {
+    size_t path_length = strlen(path);
+    uint32_t directory_end = (uint32_t)(path_length - 1);
+    for (; directory_end > 0; --directory_end) {
+        if (path[directory_end] == '/' || path[directory_end] == '\\') {
+            break;
+        }
+    }
+
+    return &path[directory_end + 1];
 }
 
 
@@ -658,6 +719,7 @@ void debugger_t::handle_debug_event() {
             src_file->editor.SetCurrentLineStepping(lvbh_data->line_number - 1);
 
             update_locals(shared_->ctx);
+            update_call_stack();
 
             is_process_suspended_ = 1;
         } break;
@@ -678,6 +740,7 @@ void debugger_t::handle_debug_event() {
             src_file->editor.SetCurrentLineStepping(data->line_number - 1);
 
             update_locals(shared_->ctx);
+            update_call_stack();
 
             is_process_suspended_ = 1;
         } break;
@@ -694,6 +757,7 @@ void debugger_t::handle_debug_event() {
             src_file->editor.SetCurrentLineStepping(data->line_number - 1);
 
             update_locals(shared_->ctx);
+            update_call_stack();
 
             is_process_suspended_ = 1;
         } break;
@@ -710,6 +774,7 @@ void debugger_t::handle_debug_event() {
             src_file->editor.SetCurrentLineStepping(data->line_number - 1);
 
             update_locals(shared_->ctx);
+            update_call_stack();
 
             is_process_suspended_ = 1;
         } break;
@@ -776,6 +841,7 @@ void debugger_t::update_local_symbol(
 
         void *data = lgdb_lnmalloc(&dbg->variable_copy_allocator_, symbol->size);
         symbol->debugger_bytes_ptr = data;
+        symbol->user_flags = 0;
 
         lgdb_read_buffer_from_process(
             ctx,
@@ -797,6 +863,19 @@ void debugger_t::update_local_symbol(
     }
 
     frame->symbol_ptr_pool_start[frame->var_count++] = symbol;
+}
+
+
+/* Static */
+void debugger_t::update_call_stack(lgdb_process_ctx_t *ctx, void *obj, lgdb_call_stack_frame_t *frame) {
+    debugger_t *dbg = (debugger_t *)obj;
+    call_stack_frame_t frame_copy = {};
+    frame_copy.addr = frame->addr;
+    frame_copy.file_name = remove_path(frame->file_name);
+    frame_copy.function_name = frame->function_name;
+    frame_copy.line_number = frame->line_number;
+    frame_copy.module_name = remove_path(frame->module_name);
+    dbg->call_stack_.push_back(frame_copy);
 }
 
 
@@ -852,4 +931,10 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
 
     watch_frame->var_count = 0;
     lgdb_update_local_symbols(ctx, update_local_symbol, this);
+}
+
+
+void debugger_t::update_call_stack() {
+    call_stack_.clear();
+    lgdb_update_call_stack(shared_->ctx, this, debugger_t::update_call_stack);
 }

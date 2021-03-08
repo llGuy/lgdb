@@ -50,6 +50,10 @@ extern void lets_go_to_another_file();
 struct function_return_t {
     int a, b, c;
     const char *my_string;
+
+    int method(int method_param) {
+        return method_param * a + b;
+    }
 };
 
 function_return_t return_a_struct() {
@@ -69,6 +73,7 @@ typedef int some_type_t;
 
 int main() {
     function_return_t ret = return_a_struct();
+    ret.method(42);
     ret.a++;
 
     function_return_t *ptr = &ret;

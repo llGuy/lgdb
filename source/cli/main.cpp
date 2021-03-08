@@ -131,7 +131,7 @@ static bool s_parse_input(lgdb_process_ctx_t *ctx) {
     } break;
 
     case 't': {
-        lgdb_update_call_stack(ctx);
+        lgdb_update_call_stack(ctx, NULL, NULL);
     } break;
 
     case 'c': {

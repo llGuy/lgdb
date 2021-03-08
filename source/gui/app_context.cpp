@@ -202,12 +202,13 @@ ImGuiID app_context_t::tick_main_window() {
         ImGui::DockBuilderSetNodeSize(dock_space_id, viewport->Size);
 
         ImGuiID dock_main_id = dock_space_id;
-        ImGuiID left = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.3f, NULL, &dock_main_id);
+        ImGuiID left = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.5f, NULL, &dock_main_id);
         debugger_->dock = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Up, 0.7f, NULL, &dock_main_id);
         // ImGuiID right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 1.0f, NULL, &dock_main_id);
 
         ImGui::DockBuilderDockWindow("Watch", left);
         ImGui::DockBuilderDockWindow("Code", debugger_->dock);
+        ImGui::DockBuilderDockWindow("Call Stack", dock_main_id);
         ImGui::DockBuilderDockWindow("Output", dock_main_id);
 
         // ImGui::DockBuilderFinish(dock_space_id);
@@ -299,12 +300,20 @@ void app_context_t::tick_debugging_keybindings() {
             debugger_->start_and_break_at_main();
         }
 
+        if (ImGui::IsKeyPressed(SDL_SCANCODE_2)) {
+            debugger_->toggle_breakpoint(NULL, 0);
+        }
+
         if (ImGui::IsKeyPressed(SDL_SCANCODE_S)) {
             debugger_->step_into();
         }
 
         if (ImGui::IsKeyPressed(SDL_SCANCODE_D)) {
             debugger_->step_over();
+        }
+
+        if (ImGui::IsKeyPressed(SDL_SCANCODE_C)) {
+            debugger_->continue_process();
         }
     }
 }

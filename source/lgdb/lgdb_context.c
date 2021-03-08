@@ -256,3 +256,25 @@ void lgdb_print_diagnostics(lgdb_process_ctx_t *ctx) {
     printf("--- SYMBOL DIAGNOSTICS ---\n");
     printf("");
 }
+
+
+lgdb_entry_point_t lgdb_find_entry_point(lgdb_process_ctx_t *ctx) {
+    IMAGEHLP_SYMBOL64 *sym = lgdb_make_symbol_info(ctx, "main");
+    if (!sym) {
+        if (!(sym = lgdb_make_symbol_info(ctx, "WinMain"))) {
+            sym = lgdb_make_symbol_info(ctx, "wWinMain");
+        }
+    }
+
+    if (!sym) {
+        printf("Couldn't find entry point\n");
+        assert(0);
+    }
+
+    lgdb_entry_point_t entry_point = {
+        .address = sym->Address,
+        .function_name = sym->Name
+    };
+
+    return entry_point;
+}

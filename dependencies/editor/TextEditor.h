@@ -193,6 +193,7 @@ public:
 	void SetPalette(const Palette& aValue);
 
 	void SetErrorMarkers(const ErrorMarkers& aMarkers) { mErrorMarkers = aMarkers; }
+	Breakpoints &GetBreakpoints() { return mBreakpoints; };
 	void SetBreakpoints(const Breakpoints& aMarkers) { mBreakpoints = aMarkers; }
 
 	void SetCurrentLineStepping(int aLine) { mCurrentSteppingLine = aLine; };

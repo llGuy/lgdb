@@ -430,14 +430,25 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
         break;
     };
 
-                      /*
     case SymTagPointerType: {
-        return s_print_pointer_type(address, size, type);
+        lgdb_symbol_type_t *pointed_type = lgdb_get_type(shared_->ctx, type->uinfo.array_type.type_index);
+
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::Text("%s", sym_name);
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text("%p", *(void **)address);
+        ImGui::TableSetColumnIndex(2);
+
+        const char *pointed_type_name = pointed_type->name;
+        if (type->tag == SymTagBaseType) {
+            pointed_type_name = lgdb_get_base_type_string(pointed_type->uinfo.base_type.base_type);
+        }
+
+        ImGui::Text("%s*", pointed_type_name);
+        ImGui::TableSetColumnIndex(3);
+        ImGui::Text("%d", size);
     };
-
-
-
-                   */
 
     default: {};
     }
@@ -761,7 +772,7 @@ void debugger_t::update_local_symbol(
         symbol->name[name_len] = 0;
 
         /* Registers the type if it hasn't already been registered */
-        lgdb_get_type(ctx, symbol->type_index);
+        lgdb_symbol_type_t *type = lgdb_get_type(ctx, symbol->type_index);
 
         void *data = lgdb_lnmalloc(&dbg->variable_copy_allocator_, symbol->size);
         symbol->debugger_bytes_ptr = data;

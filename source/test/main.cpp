@@ -68,9 +68,10 @@ int assembly_test(int first_arg, int second_arg) {
 typedef int some_type_t;
 
 int main() {
-
     function_return_t ret = return_a_struct();
     ret.a++;
+
+    function_return_t *ptr = &ret;
 
     test_derived_class_t derived = {};
 

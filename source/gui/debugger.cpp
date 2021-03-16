@@ -136,7 +136,7 @@ void debugger_t::init() {
 
     symbol_ptr_count_ = 0;
     max_symbol_ptr_count_ = 500;
-    symbol_ptr_pool_ = new lgdb_symbol_t *[max_symbol_ptr_count_];
+    symbol_ptr_pool_ = new variable_info_t *[max_symbol_ptr_count_];
 
     watch_frames_.reserve(30);
 
@@ -220,14 +220,14 @@ void debugger_t::tick(ImGuiID main) {
                     if (opened) {
 
                         for (uint32_t i = 0; i < watch_frame->var_count; i++) {
-                            lgdb_symbol_t *sym = watch_frame->symbol_ptr_pool_start[i];
+                            variable_info_t *var = watch_frame->symbol_ptr_pool_start[i];
 
                             render_symbol_type_data(
-                                sym->name,
+                                var->sym.name,
                                 NULL,
-                                sym->debugger_bytes_ptr,
-                                sym->size,
-                                lgdb_get_type(shared_->ctx, sym->type_index));
+                                var->sym.debugger_bytes_ptr,
+                                var->sym.size,
+                                lgdb_get_type(shared_->ctx, var->sym.type_index));
                         }
 
                         ImGui::TreePop();
@@ -843,48 +843,83 @@ void debugger_t::update_local_symbol(
 
     auto entry = dbg->sym_idx_to_ptr.find(sym->sym_index);
 
-    lgdb_symbol_t *symbol = NULL;
+    variable_info_t *var = NULL;
     
     if (entry == dbg->sym_idx_to_ptr.end()) {
         // We need to allocate in variable info, etc...
-        symbol = (lgdb_symbol_t *)lgdb_lnmalloc(
+        var = (variable_info_t *)lgdb_lnmalloc(
             &dbg->variable_info_allocator_,
-            sizeof(lgdb_symbol_t));
+            sizeof(variable_info_t));
 
-        *symbol = *sym;
+        var->sym = *sym;
+        var->open = 0;
 
         uint32_t name_len = strlen(name);
-        symbol->name = (char *)lgdb_lnmalloc(&dbg->variable_info_allocator_, (1 + name_len) * sizeof(char));
-        memcpy(symbol->name, name, name_len * sizeof(char));
-        symbol->name[name_len] = 0;
+        var->sym.name = (char *)lgdb_lnmalloc(&dbg->variable_info_allocator_, (1 + name_len) * sizeof(char));
+        memcpy(var->sym.name, name, name_len * sizeof(char));
+        var->sym.name[name_len] = 0;
 
         /* Registers the type if it hasn't already been registered */
-        lgdb_symbol_type_t *type = lgdb_get_type(ctx, symbol->type_index);
+        lgdb_symbol_type_t *type = lgdb_get_type(ctx, var->sym.type_index);
 
-        void *data = lgdb_lnmalloc(&dbg->variable_copy_allocator_, symbol->size);
-        symbol->debugger_bytes_ptr = data;
-        symbol->user_flags = 0;
+        void *data = lgdb_lnmalloc(&dbg->variable_copy_allocator_, var->sym.size);
+        var->sym.debugger_bytes_ptr = data;
+        var->sym.user_flags = 0;
 
-        lgdb_read_buffer_from_process(
-            ctx,
-            (uint64_t)lgdb_get_real_symbol_address(ctx, symbol),
-            symbol->size,
-            symbol->debugger_bytes_ptr);
+        var->sub = NULL;
 
-        dbg->sym_idx_to_ptr.insert(std::make_pair(sym->sym_index, symbol));
+        /* We need to store settings for each element / member (whether to collapse, etc...) */
+        switch (type->tag) {
+
+        default: {
+            lgdb_read_buffer_from_process(
+                ctx,
+                (uint64_t)lgdb_get_real_symbol_address(ctx, &var->sym),
+                var->sym.size,
+                var->sym.debugger_bytes_ptr);
+        } break;
+
+        }
+
+        dbg->sym_idx_to_ptr.insert(std::make_pair(sym->sym_index, var));
     }
     else {
         // This variabe is already registered
-        symbol = entry->second;
+        var = entry->second;
+
+        lgdb_symbol_type_t *type = lgdb_get_type(ctx, var->sym.type_index);
+
+        switch (type->tag) {
+        case SymTagPointerType: {
+            if (var->open) {
+                if (!var->sub) {
+                    /* Need to allocate space for inspecting count number of variables */
+
+                }
+            }
+        } break;
+
+        case SymTagArrayType: {
+            
+        } break;
+
+        case SymTagUDT: {
+            
+        } break;
+
+        default: {
+            
+        } break;
+        }
 
         lgdb_read_buffer_from_process(
             ctx,
-            (uint64_t)lgdb_get_real_symbol_address(ctx, symbol),
-            symbol->size,
-            symbol->debugger_bytes_ptr);
+            (uint64_t)lgdb_get_real_symbol_address(ctx, &var->sym),
+            var->sym.size,
+            var->sym.debugger_bytes_ptr);
     }
 
-    frame->symbol_ptr_pool_start[frame->var_count++] = symbol;
+    frame->symbol_ptr_pool_start[frame->var_count++] = var;
 }
 
 

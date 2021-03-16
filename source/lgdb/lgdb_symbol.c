@@ -346,7 +346,7 @@ static uint32_t s_register_udt_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t 
     lgdb_member_var_t *member_vars = LGDB_LNMALLOC(&ctx->lnmem, lgdb_member_var_t, TIS_MAXNUMCHILDREN);
 
     uint32_t methods_count = 0;
-    uint32_t *methods= LGDB_LNMALLOC(&ctx->lnmem, uint32_t, TIS_MAXNUMCHILDREN);
+    uint32_t *methods = LGDB_LNMALLOC(&ctx->lnmem, uint32_t, TIS_MAXNUMCHILDREN);
 
     uint32_t base_classes_count = 0;
     lgdb_base_class_t *base_classes = LGDB_LNMALLOC(&ctx->lnmem, lgdb_base_class_t, TIS_MAXNUMCHILDREN);
@@ -394,6 +394,7 @@ static uint32_t s_register_udt_type(lgdb_process_ctx_t *ctx, lgdb_symbol_type_t 
             member_vars[member_vars_count].size = (uint32_t)length;
             member_vars[member_vars_count].sym_idx = children_params->ChildId[i];
             member_vars[member_vars_count].name = s_get_sym_name(ctx, children_params->ChildId[i]);
+            member_vars[member_vars_count].member_idx = member_vars_count;
             member_vars[member_vars_count++].type_idx = type_idx;
         }
         else if (tag == SymTagFunction) {

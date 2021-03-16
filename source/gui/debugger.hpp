@@ -26,6 +26,7 @@ struct open_panels_t {
             uint8_t breakpoints : 1;
             uint8_t output : 1;
             uint8_t call_stack : 1;
+            uint8_t fun_with_bits : 1;
         };
         uint8_t bits;
     };
@@ -82,6 +83,17 @@ struct call_stack_frame_t {
 };
 
 
+struct variable_info_t {
+    uint32_t open : 1;
+    uint32_t inspecting_count : 16;
+    uint32_t requested : 15;
+    lgdb_symbol_t sym;
+    uint32_t sub_count;
+    variable_info_t *next;
+    variable_info_t *sub;
+};
+
+
 /* May be a scope, or just a single variable, etc... */
 struct watch_frame_t {
     /* 
@@ -92,7 +104,7 @@ struct watch_frame_t {
 
     void *start_in_variable_info_allocator;
 
-    lgdb_symbol_t **symbol_ptr_pool_start;
+    variable_info_t **symbol_ptr_pool_start;
 
     uint64_t stack_frame;
     uint32_t var_count;
@@ -161,13 +173,13 @@ private:
     int32_t current_watch_frame_idx_;
     std::vector<watch_frame_t> watch_frames_;
 
-    std::unordered_map<uint32_t, lgdb_symbol_t *> sym_idx_to_ptr;
+    std::unordered_map<uint32_t, variable_info_t *> sym_idx_to_ptr;
 
     /* 
        A contiguous list of pointers to variable information 
        These pointers point to somewhere in the variable_info_allocator_
     */
-    lgdb_symbol_t **symbol_ptr_pool_;
+    variable_info_t **symbol_ptr_pool_;
     uint32_t symbol_ptr_count_;
     uint32_t max_symbol_ptr_count_;
     lgdb_linear_allocator_t variable_info_allocator_;

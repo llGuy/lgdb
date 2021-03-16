@@ -19,7 +19,6 @@
 
 #define FPS 45
 
-
 void app_context_t::run(const char *cmdline) {
     init();
 
@@ -60,7 +59,7 @@ void app_context_t::init() {
 
     is_running_ = 1;
 
-    // debugger_t::open_file_proc("C:\\Users\\lucro\\Development\\lgdb\\build\\Debug\\lgdbtest.exe", debugger_);
+    debugger_t::open_file_proc("C:\\Users\\lucro\\Development\\lgdb\\build\\Debug\\lgdbtest.exe", debugger_);
 }
 
 

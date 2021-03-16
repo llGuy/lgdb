@@ -36,6 +36,7 @@ typedef struct lgdb_member_var {
     uint32_t type_idx;
     uint32_t offset;
     uint32_t size;
+    uint32_t member_idx;
     char *name;
 } lgdb_member_var_t;
 
@@ -117,6 +118,7 @@ typedef struct lgdb_symbol {
 
     /* Pointer in debugger address space */
     void *debugger_bytes_ptr;
+    void *additional_ptr;
     /* User is free to use these flags */
     uint32_t user_flags;
 } lgdb_symbol_t;

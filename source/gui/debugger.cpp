@@ -223,6 +223,7 @@ void debugger_t::tick(ImGuiID main) {
                             variable_info_t *var = watch_frame->symbol_ptr_pool_start[i];
 
                             render_symbol_type_data(
+                                var,
                                 var->sym.name,
                                 NULL,
                                 var->sym.debugger_bytes_ptr,
@@ -370,7 +371,13 @@ bool debugger_t::render_composed_var_row(const char *name, const char *type, uin
 }
 
 
-void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_name, void *address, uint32_t size, lgdb_symbol_type_t *type) {
+void debugger_t::render_symbol_type_data(
+    variable_info_t *var,
+    const char *sym_name,
+    const char *type_name,
+    void *address,
+    uint32_t size,
+    lgdb_symbol_type_t *type) {
     switch (type->tag) {
     case SymTagBaseType: render_symbol_base_type_data(
         sym_name,
@@ -381,7 +388,7 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
 
     case SymTagTypedef: {
         lgdb_symbol_type_t *typedefed_type = lgdb_get_type(shared_->ctx, type->uinfo.typedef_type.type_index);
-        render_symbol_type_data(sym_name, type->name, address, size, typedefed_type);
+        render_symbol_type_data(var, sym_name, type->name, address, size, typedefed_type);
 
         break;
     };
@@ -393,13 +400,13 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
             for (uint32_t i = 0; i < type->uinfo.udt_type.base_classes_count; ++i) {
                 lgdb_base_class_t *base_class = &type->uinfo.udt_type.base_classes_type_idx[i];
                 lgdb_symbol_type_t *base_class_type = lgdb_get_type(shared_->ctx, base_class->type_idx);
-                render_symbol_type_data(base_class_type->name, base_class_type->name, (uint8_t *)address + base_class->offset, base_class->size, base_class_type);
+                render_symbol_type_data(var, base_class_type->name, base_class_type->name, (uint8_t *)address + base_class->offset, base_class->size, base_class_type);
             }
 
             for (uint32_t i = 0; i < type->uinfo.udt_type.member_var_count; ++i) {
-                lgdb_member_var_t *var = &type->uinfo.udt_type.member_vars_type_idx[i];
-                lgdb_symbol_type_t *member_type = lgdb_get_type(shared_->ctx, var->type_idx);
-                render_symbol_type_data(var->name, member_type->name, (uint8_t *)address + var->offset, var->size, member_type);
+                lgdb_member_var_t *member_var = &type->uinfo.udt_type.member_vars_type_idx[i];
+                lgdb_symbol_type_t *member_type = lgdb_get_type(shared_->ctx, member_var->type_idx);
+                render_symbol_type_data(var, member_var->name, member_type->name, (uint8_t *)address + member_var->offset, member_var->size, member_type);
             }
 
             ImGui::TreePop();
@@ -426,7 +433,7 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
         if (opened) {
             for (uint32_t i = 0; i < element_count && i < 30; ++i) {
                 sprintf(buffer, "[%d]", i);
-                render_symbol_type_data(buffer, arrayed_type->name, (uint8_t *)address + arrayed_type->size * i, arrayed_type->size, arrayed_type);
+                render_symbol_type_data(var, buffer, arrayed_type->name, (uint8_t *)address + arrayed_type->size * i, arrayed_type->size, arrayed_type);
             }
 
             ImGui::TreePop();
@@ -478,7 +485,16 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
 
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
-        ImGui::TreeNodeEx(sym_name, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_Bullet | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanFullWidth);
+        bool opened = ImGui::TreeNodeEx(sym_name, ImGuiTreeNodeFlags_SpanFullWidth);
+
+        if (!var->open && opened) {
+            var->open = 1;
+            var->requested = 1;
+            deep_update_variable_info(shared_->ctx, var);
+        }
+
+        var->open = opened;
+        
         ImGui::TableSetColumnIndex(1);
         ImGui::Text("%p", *(void **)address);
         ImGui::TableSetColumnIndex(2);
@@ -491,6 +507,20 @@ void debugger_t::render_symbol_type_data(const char *sym_name, const char *type_
         ImGui::Text("%s*", pointed_type_name);
         ImGui::TableSetColumnIndex(3);
         ImGui::Text("%d", size);
+
+        if (opened) {
+            variable_info_t *sub = var->sub_start;
+            uint32_t count_in_buffer = sub->count_in_buffer;
+            char name_buf[15] = {};
+            for (uint32_t i = 0; i < count_in_buffer; i++) {
+                lgdb_symbol_type_t *type = lgdb_get_type(shared_->ctx, sub->sym.type_index);
+                sprintf(name_buf, "[%d]", i);
+                render_symbol_type_data(sub, name_buf, type->name, sub->sym.debugger_bytes_ptr, type->size, type);
+                sub++;
+            }
+
+            ImGui::TreePop();
+        }
     };
 
     default: {};
@@ -866,7 +896,7 @@ void debugger_t::update_local_symbol(
         var->sym.debugger_bytes_ptr = data;
         var->sym.user_flags = 0;
 
-        var->sub = NULL;
+        var->sub_start = NULL;
 
         /* We need to store settings for each element / member (whether to collapse, etc...) */
         switch (type->tag) {
@@ -887,16 +917,78 @@ void debugger_t::update_local_symbol(
         // This variabe is already registered
         var = entry->second;
 
-        lgdb_symbol_type_t *type = lgdb_get_type(ctx, var->sym.type_index);
+        auto *type = lgdb_get_type(ctx, var->sym.type_index);
 
         switch (type->tag) {
         case SymTagPointerType: {
-            if (var->open) {
-                if (!var->sub) {
-                    /* Need to allocate space for inspecting count number of variables */
+#if 0
+            lgdb_read_buffer_from_process(
+                ctx,
+                (uint64_t)lgdb_get_real_symbol_address(ctx, &var->sym),
+                var->sym.size,
+                var->sym.debugger_bytes_ptr);
 
+            if (var->open) {
+                auto *pointed_type = lgdb_get_type(ctx, type->uinfo.pointer_type.type_index);
+                uint64_t pointer_value = *(uint64_t *)var->sym.debugger_bytes_ptr;
+
+                if (!var->sub_start) {
+                    var->inspecting_count = var->requested;
+
+                    /* Need to allocate space for inspecting count number of variables */
+                    var->sub_start = (variable_info_t *)lgdb_lnmalloc(&dbg->variable_info_allocator_, sizeof(variable_info_t) * var->inspecting_count);
+                    memset(var->sub_start, 0, sizeof(variable_info_t) * var->inspecting_count);
+
+                    { // Initialise the linked list
+                        auto *sub = var->sub_start;
+                        for (uint32_t i = 0; i < var->inspecting_count - 1; ++i) {
+                            sub->sym.real_addr = pointer_value + i * pointed_type->size;
+                            sub->sym.type_index = pointed_type->index;
+                            sub->sym.type_index = pointed_type->index;
+
+                            sub->next = sub + 1;
+                            sub = sub->next;
+                        }
+
+                        var->sub_end = sub;
+                        sub->next = NULL;
+                    }
+
+                    if (pointed_type->tag != SymTagUDT && pointed_type->tag != SymTagArrayType) {
+                        
+                    }
+                }
+                else if (var->requested > var->inspecting_count) {
+                    /* Add some more */
+                    uint32_t diff = var->requested - var->inspecting_count;
+                    var->sub_end->next = (variable_info_t *)lgdb_lnmalloc(&dbg->variable_info_allocator_, sizeof(variable_info_t) * diff);
+                    memset(var->sub_end->next, 0, sizeof(variable_info_t) * var->inspecting_count);
+
+                    { // Initialise the linked list from here
+                        auto *sub = var->sub_end->next;
+                        for (uint32_t i = 0; i < diff - 1; ++i) {
+                            sub->sym.real_addr = pointer_value + (i + var->inspecting_count) * pointed_type->size;
+                            sub->sym.type_index = pointed_type->index;
+                            sub->next = sub + 1;
+                            sub = sub->next;
+                        }
+
+                        var->sub_end = sub;
+                        sub->next = NULL;
+                    }
+
+                    var->inspecting_count = var->requested;
+                }
+
+                // With everything allocated, read from the memory of the variable
+                for (
+                    variable_info_t *current_open = var->sub_start;
+                    current_open;
+                    current_open = current_open->next_open) {
+                    
                 }
             }
+#endif
         } break;
 
         case SymTagArrayType: {
@@ -998,4 +1090,77 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
 void debugger_t::update_call_stack() {
     call_stack_.clear();
     lgdb_update_call_stack(shared_->ctx, this, debugger_t::update_call_stack);
+}
+
+
+void debugger_t::deep_update_variable_info(lgdb_process_ctx_t *ctx, variable_info_t *var) {
+    lgdb_symbol_t *sym = &var->sym;
+    lgdb_symbol_type_t *type = lgdb_get_type(ctx, sym->type_index);
+
+    switch (type->tag) {
+    case SymTagPointerType: {
+        // Priority 1: read the value of the pointer itself
+        lgdb_read_buffer_from_process(
+            ctx,
+            (uint64_t)lgdb_get_real_symbol_address(ctx, sym),
+            sym->size,
+            sym->debugger_bytes_ptr);
+
+        // Priority 2: read the array of values that are being pointed
+        if (var->open) {
+            lgdb_symbol_type_t *pointed_type = lgdb_get_type(ctx, type->uinfo.pointer_type.type_index);
+            uint64_t pointer_value = *(uint64_t *)sym->debugger_bytes_ptr;
+
+            if (!var->sub_start) {
+                var->inspecting_count = var->requested;
+
+                var->sub_start = (variable_info_t *)lgdb_lnmalloc(
+                    &variable_info_allocator_,
+                    sizeof(variable_info_t) * var->inspecting_count);
+
+                memset(var->sub_start, 0, sizeof(variable_info_t) * var->inspecting_count);
+
+                { // Initialise the linked list
+                    auto *sub = var->sub_start;
+                    sub->count_in_buffer = var->requested;
+                    sub->sym.real_addr = pointer_value;
+                    sub->sym.type_index = pointed_type->index;
+
+                    for (uint32_t i = 1; i < var->inspecting_count - 1; ++i) {
+                        sub->sym.real_addr = pointer_value + i * pointed_type->size;
+                        sub->sym.type_index = pointed_type->index;
+                        sub->count_in_buffer = -1;
+
+                        sub->next = sub + 1;
+                        sub = sub->next;
+                    }
+
+                    var->sub_end = sub;
+                    sub->next = NULL;
+                }
+
+                /* Only read in all the values if this isn't a composed type */
+                if (pointed_type->tag != SymTagUDT && pointed_type->tag != SymTagArrayType) {
+                    void *copy_buffer = lgdb_lnmalloc(
+                        &variable_copy_allocator_,
+                        pointed_type->size * var->requested);
+
+                    lgdb_read_buffer_from_process(
+                        ctx,
+                        pointer_value,
+                        pointed_type->size * var->requested,
+                        copy_buffer);
+
+                    auto *sub = var->sub_start;
+                    for (uint32_t i = 0; i < var->inspecting_count; ++i) {
+                        sub[i].sym.debugger_bytes_ptr = (uint8_t *)copy_buffer + pointed_type->size * i;
+                    }
+                }
+            }
+            else {
+                // Go through each buffer
+            }
+        }
+    } break;
+    }
 }

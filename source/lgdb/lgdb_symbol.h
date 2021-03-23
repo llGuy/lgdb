@@ -90,7 +90,6 @@ typedef struct lgdb_symbol_type {
 
     union {
         lgdb_symbol_enum_type_t enum_type;
-
         lgdb_symbol_base_type_t base_type;
         lgdb_symbol_typedef_type_t typedef_type;
         lgdb_symbol_pointer_type_t pointer_type;

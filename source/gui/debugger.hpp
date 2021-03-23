@@ -87,10 +87,13 @@ struct variable_info_t {
     uint32_t open : 1;
     uint32_t inspecting_count : 16;
     uint32_t requested : 15;
+    int32_t count_in_buffer;
+
     lgdb_symbol_t sym;
-    uint32_t sub_count;
     variable_info_t *next;
-    variable_info_t *sub;
+    variable_info_t *next_open;
+    variable_info_t *sub_start;
+    variable_info_t *sub_end;
 };
 
 
@@ -144,7 +147,15 @@ private:
     /* Returns true if uncollapsed */
     bool render_composed_var_row(const char *name, const char *type, uint32_t size);
     void render_symbol_base_type_data(const char *name, const char *type_name, void *address, uint32_t size, lgdb_symbol_type_t *type);
-    void render_symbol_type_data(const char *name, const char *type_name, void *address, uint32_t size, lgdb_symbol_type_t *type);
+    void render_symbol_type_data(
+        variable_info_t *info,
+        const char *name,
+        const char *type_name,
+        void *address,
+        uint32_t size,
+        lgdb_symbol_type_t *type);
+    // Updates all child variables too if needed
+    void deep_update_variable_info(lgdb_process_ctx_t *ctx, variable_info_t *var);
     void handle_debug_event();
     void copy_to_output_buffer(const char *buf);
     source_file_t *update_text_editor_file(const char *file_name);

@@ -94,6 +94,8 @@ struct variable_info_t {
     variable_info_t *next_open;
     variable_info_t *sub_start;
     variable_info_t *sub_end;
+
+    void deep_sync(lgdb_process_ctx_t *ctx, lgdb_linear_allocator_t *info_alloc, lgdb_linear_allocator_t *copy_alloc);
 };
 
 
@@ -115,6 +117,68 @@ struct watch_frame_t {
     struct {
         uint32_t is_stack_frame : 1;
     } flags;
+};
+
+
+class popup_t {
+public:
+    virtual ~popup_t() {};
+    virtual bool update(lgdb_process_ctx_t *ctx, lgdb_linear_allocator_t *info_alloc, lgdb_linear_allocator_t *copy_alloc) = 0;
+};
+
+
+class popup_view_count_t : public popup_t {
+public:
+    popup_view_count_t(variable_info_t *variable_info) 
+        : info_(variable_info), popup_name_("Enter View Count"), open_popup_(1) {
+    }
+
+    ~popup_view_count_t() = default;
+
+    bool update(lgdb_process_ctx_t *ctx, lgdb_linear_allocator_t *info_alloc, lgdb_linear_allocator_t *copy_alloc) override {
+        if (open_popup_) {
+            ImGui::OpenPopup(popup_name_);
+            open_popup_ = 0;
+        }
+
+        if (ImGui::BeginPopupModal(popup_name_)) {
+            char count_str[10] = {};
+
+            if (ImGui::InputText("Count", count_str, 4, ImGuiInputTextFlags_EnterReturnsTrue)) {
+                info_->requested = strtol(count_str, NULL, 10);
+                info_->deep_sync(ctx, info_alloc, copy_alloc);
+
+                ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+
+                return 1;
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("OK")) {
+                info_->requested = strtol(count_str, NULL, 10);
+                info_->deep_sync(ctx, info_alloc, copy_alloc);
+                ImGui::CloseCurrentPopup();
+
+                return 1;
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Cancel")) {
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        return 0;
+    }
+private:
+    const char *popup_name_;
+    variable_info_t *info_;
+    bool open_popup_;
 };
 
 
@@ -155,7 +219,6 @@ private:
         uint32_t size,
         lgdb_symbol_type_t *type);
     // Updates all child variables too if needed
-    void deep_update_variable_info(lgdb_process_ctx_t *ctx, variable_info_t *var);
     void handle_debug_event();
     void copy_to_output_buffer(const char *buf);
     source_file_t *update_text_editor_file(const char *file_name);
@@ -203,6 +266,8 @@ private:
 
     std::vector<call_stack_frame_t> call_stack_;
     bool changed_frame_;
+
+    std::vector<popup_t *> popups_;
 
 public:
 

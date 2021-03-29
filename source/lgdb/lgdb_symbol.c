@@ -227,11 +227,11 @@ static char *s_get_sym_name(lgdb_process_ctx_t *ctx, uint32_t idx) {
         TI_GET_SYMNAME,
         &unicode_name);
 
-    uint32_t len = wcslen(unicode_name);
+    uint32_t len = (uint32_t)wcslen(unicode_name);
 
     char *name = LGDB_LNMALLOC(&ctx->symbols.type_mem, char, len + 1);
 
-    for (int i = 0; i < len; i++) {
+    for (int i = 0; i < (int)len; i++) {
         name[i] = (char)unicode_name[i];
     }
 

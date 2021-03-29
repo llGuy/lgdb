@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <fstream>
 
+#include "variable.hpp"
+
 extern "C" {
 #include <lgdb_context.h>
 }
@@ -80,22 +82,6 @@ struct call_stack_frame_t {
     std::string file_name;
     std::string module_name;
     int32_t line_number;
-};
-
-
-struct variable_info_t {
-    uint32_t open : 1;
-    uint32_t inspecting_count : 16;
-    uint32_t requested : 15;
-    int32_t count_in_buffer;
-
-    lgdb_symbol_t sym;
-    variable_info_t *next;
-    variable_info_t *next_open;
-    variable_info_t *sub_start;
-    variable_info_t *sub_end;
-
-    void deep_sync(lgdb_process_ctx_t *ctx, lgdb_linear_allocator_t *info_alloc, lgdb_linear_allocator_t *copy_alloc);
 };
 
 

@@ -161,7 +161,7 @@ void app_context_t::end_frame() {
     ImGui::Render();
 
     ImGuiIO &io = ImGui::GetIO();
-    glViewport(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+    glViewport(0, 0, (GLsizei)io.DisplaySize.x, (GLsizei)io.DisplaySize.y);
 
     glm::vec4 clear_color = glm::vec4(0.1f, 0.1f, 0.1f, 1.0f);
 

@@ -1,5 +1,7 @@
 #define _NO_CVCONST_H
+#define _CRT_SECURE_NO_WARNINGS
 #include "debugger.hpp"
+#include "variable.hpp"
 
 
 extern "C" {
@@ -120,7 +122,7 @@ void debugger_t::init() {
 
     source_files_.reserve(50);
 
-    output_buffer_max_ = lgdb_megabytes(1);
+    output_buffer_max_ = (uint32_t)lgdb_megabytes(1);
     output_buffer_ = new char[output_buffer_max_];
     memset(output_buffer_, 0, output_buffer_max_);
     output_buffer_counter_ = 0;
@@ -144,8 +146,8 @@ void debugger_t::init() {
     current_stack_frame_ = 0xFFFFFFFFFFFFFFFF;
     current_watch_frame_idx_ = -1;
 
-    variable_info_allocator_ = lgdb_create_linear_allocator(lgdb_megabytes(1));
-    variable_copy_allocator_ = lgdb_create_linear_allocator(lgdb_megabytes(1));
+    variable_info_allocator_ = lgdb_create_linear_allocator((uint32_t)lgdb_megabytes(1));
+    variable_copy_allocator_ = lgdb_create_linear_allocator((uint32_t)lgdb_megabytes(1));
 
     is_process_suspended_ = 0;
     changed_frame_ = 0;
@@ -197,7 +199,7 @@ void debugger_t::tick(ImGuiID main) {
 
             if (is_process_suspended_) {
                 uint32_t call_stack_idx = 0;
-                for (int32_t i = watch_frames_.size() - 1; i >= 0; --i) {
+                for (int32_t i = (int32_t)watch_frames_.size() - 1; i >= 0; --i) {
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
 
@@ -271,11 +273,11 @@ void debugger_t::tick(ImGuiID main) {
 
         if (ImGui::BeginTable("Watch", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
 
-            ImGui::TableSetupColumn("Address", 0.1f);
-            ImGui::TableSetupColumn("Function", 0.25f);
-            ImGui::TableSetupColumn("Module", 0.3f);
-            ImGui::TableSetupColumn("File Name", 0.3f);
-            ImGui::TableSetupColumn("Line Number", 0.05f);
+            ImGui::TableSetupColumn("Address", 0, 0.1f);
+            ImGui::TableSetupColumn("Function", 0, 0.25f);
+            ImGui::TableSetupColumn("Module", 0, 0.3f);
+            ImGui::TableSetupColumn("File Name", 0, 0.3f);
+            ImGui::TableSetupColumn("Line Number", 0, 0.05f);
             ImGui::TableHeadersRow();
 
             for (auto frame : call_stack_) {
@@ -506,6 +508,12 @@ void debugger_t::render_symbol_type_data(
                 ImGui::CloseCurrentPopup();
             }
 
+            if (ImGui::Selectable("Update (Debug)")) {
+                var->deep_sync(shared_->ctx, &variable_info_allocator_, &variable_copy_allocator_);
+
+                ImGui::CloseCurrentPopup();
+            }
+
             ImGui::EndPopup();
         }
 
@@ -669,7 +677,7 @@ source_file_t *debugger_t::update_text_editor_file(const char *file_name) {
 
         auto it = source_file_map_.find(path_hash);
         if (it == source_file_map_.end()) {
-            uint32_t path_len = strlen(file_name);
+            uint32_t path_len = (uint32_t)strlen(file_name);
 
             const char *file_name_start = file_name;
 
@@ -685,7 +693,7 @@ source_file_t *debugger_t::update_text_editor_file(const char *file_name) {
             src->file_name = std::string(file_name_start);
 
             source_files_.push_back(src);
-            uint32_t idx = source_files_.size() - 1;
+            uint32_t idx = (uint32_t)source_files_.size() - 1;
             source_file_map_[path_hash] = idx;
 
             std::string contents;
@@ -866,7 +874,7 @@ void debugger_t::handle_debug_event() {
 
 
 void debugger_t::copy_to_output_buffer(const char *buf) {
-    uint32_t buf_len = strlen(buf);
+    uint32_t buf_len = (uint32_t)strlen(buf);
     strcpy_s(output_buffer_ + output_buffer_counter_, output_buffer_max_ - output_buffer_counter_, buf);
     output_buffer_counter_ += buf_len;
 }
@@ -899,140 +907,24 @@ void debugger_t::update_local_symbol(
     variable_info_t *var = NULL;
     
     if (entry == dbg->sym_idx_to_ptr.end()) {
-        // We need to allocate in variable info, etc...
+        // Allocate the variable info structure
         var = (variable_info_t *)lgdb_lnmalloc(
             &dbg->variable_info_allocator_,
             sizeof(variable_info_t));
 
-        var->sym = *sym;
-        var->open = 0;
-
-        uint32_t name_len = strlen(name);
-        var->sym.name = (char *)lgdb_lnmalloc(&dbg->variable_info_allocator_, (1 + name_len) * sizeof(char));
-        memcpy(var->sym.name, name, name_len * sizeof(char));
-        var->sym.name[name_len] = 0;
+        var->init(name, &dbg->variable_info_allocator_, &dbg->variable_copy_allocator_, sym);
 
         /* Registers the type if it hasn't already been registered */
         lgdb_symbol_type_t *type = lgdb_get_type(ctx, var->sym.type_index);
-
-        void *data = lgdb_lnmalloc(&dbg->variable_copy_allocator_, var->sym.size);
-        var->sym.debugger_bytes_ptr = data;
-        var->sym.user_flags = 0;
-
-        var->sub_start = NULL;
-
-        /* We need to store settings for each element / member (whether to collapse, etc...) */
-        switch (type->tag) {
-
-        default: {
-            lgdb_read_buffer_from_process(
-                ctx,
-                (uint64_t)lgdb_get_real_symbol_address(ctx, &var->sym),
-                var->sym.size,
-                var->sym.debugger_bytes_ptr);
-        } break;
-
-        }
 
         dbg->sym_idx_to_ptr.insert(std::make_pair(sym->sym_index, var));
     }
     else {
         // This variabe is already registered
         var = entry->second;
-
-        auto *type = lgdb_get_type(ctx, var->sym.type_index);
-
-        switch (type->tag) {
-        case SymTagPointerType: {
-#if 0
-            lgdb_read_buffer_from_process(
-                ctx,
-                (uint64_t)lgdb_get_real_symbol_address(ctx, &var->sym),
-                var->sym.size,
-                var->sym.debugger_bytes_ptr);
-
-            if (var->open) {
-                auto *pointed_type = lgdb_get_type(ctx, type->uinfo.pointer_type.type_index);
-                uint64_t pointer_value = *(uint64_t *)var->sym.debugger_bytes_ptr;
-
-                if (!var->sub_start) {
-                    var->inspecting_count = var->requested;
-
-                    /* Need to allocate space for inspecting count number of variables */
-                    var->sub_start = (variable_info_t *)lgdb_lnmalloc(&dbg->variable_info_allocator_, sizeof(variable_info_t) * var->inspecting_count);
-                    memset(var->sub_start, 0, sizeof(variable_info_t) * var->inspecting_count);
-
-                    { // Initialise the linked list
-                        auto *sub = var->sub_start;
-                        for (uint32_t i = 0; i < var->inspecting_count - 1; ++i) {
-                            sub->sym.real_addr = pointer_value + i * pointed_type->size;
-                            sub->sym.type_index = pointed_type->index;
-                            sub->sym.type_index = pointed_type->index;
-
-                            sub->next = sub + 1;
-                            sub = sub->next;
-                        }
-
-                        var->sub_end = sub;
-                        sub->next = NULL;
-                    }
-
-                    if (pointed_type->tag != SymTagUDT && pointed_type->tag != SymTagArrayType) {
-                        
-                    }
-                }
-                else if (var->requested > var->inspecting_count) {
-                    /* Add some more */
-                    uint32_t diff = var->requested - var->inspecting_count;
-                    var->sub_end->next = (variable_info_t *)lgdb_lnmalloc(&dbg->variable_info_allocator_, sizeof(variable_info_t) * diff);
-                    memset(var->sub_end->next, 0, sizeof(variable_info_t) * var->inspecting_count);
-
-                    { // Initialise the linked list from here
-                        auto *sub = var->sub_end->next;
-                        for (uint32_t i = 0; i < diff - 1; ++i) {
-                            sub->sym.real_addr = pointer_value + (i + var->inspecting_count) * pointed_type->size;
-                            sub->sym.type_index = pointed_type->index;
-                            sub->next = sub + 1;
-                            sub = sub->next;
-                        }
-
-                        var->sub_end = sub;
-                        sub->next = NULL;
-                    }
-
-                    var->inspecting_count = var->requested;
-                }
-
-                // With everything allocated, read from the memory of the variable
-                for (
-                    variable_info_t *current_open = var->sub_start;
-                    current_open;
-                    current_open = current_open->next_open) {
-                    
-                }
-            }
-#endif
-        } break;
-
-        case SymTagArrayType: {
-            
-        } break;
-
-        case SymTagUDT: {
-            
-        } break;
-
-        default: {
-            
-        } break;
-        }
-
-        lgdb_read_buffer_from_process(
-            ctx,
-            (uint64_t)lgdb_get_real_symbol_address(ctx, &var->sym),
-            var->sym.size,
-            var->sym.debugger_bytes_ptr);
     }
+
+    var->deep_sync(ctx, &dbg->variable_info_allocator_, &dbg->variable_copy_allocator_);
 
     frame->symbol_ptr_pool_start[frame->var_count++] = var;
 }
@@ -1060,7 +952,7 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
 
         // We just called a function - push a new watch group
         watch_frames_.push_back(watch_frame_t{});
-        uint32_t new_watch_idx = watch_frames_.size() - 1;
+        uint32_t new_watch_idx = (uint32_t)watch_frames_.size() - 1;
 
         watch_frame = &watch_frames_[new_watch_idx];
         watch_frame->stack_frame = new_frame;
@@ -1075,7 +967,7 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
             watch_frame->symbol_ptr_pool_start = previous_frame->symbol_ptr_pool_start + previous_frame->var_count;
         }
 
-        current_watch_frame_idx_ = watch_frames_.size() - 1;
+        current_watch_frame_idx_ = (uint32_t)watch_frames_.size() - 1;
 
         watch_frame->start_in_variable_info_allocator = variable_info_allocator_.current;
 
@@ -1095,7 +987,7 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
         current_stack_frame_ = new_frame;
 
         if (watch_frames_.size())
-            current_watch_frame_idx_ = watch_frames_.size() - 1;
+            current_watch_frame_idx_ = (uint32_t)watch_frames_.size() - 1;
 
         watch_frame = &watch_frames_[current_watch_frame_idx_];
         changed_frame_ = true;
@@ -1113,126 +1005,4 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
 void debugger_t::update_call_stack() {
     call_stack_.clear();
     lgdb_update_call_stack(shared_->ctx, this, debugger_t::update_call_stack);
-}
-
-
-void variable_info_t::deep_sync(lgdb_process_ctx_t *ctx, lgdb_linear_allocator_t *info_alloc, lgdb_linear_allocator_t *copy_alloc) {
-    lgdb_symbol_type_t *type = lgdb_get_type(ctx, sym.type_index);
-
-    switch (type->tag) {
-    case SymTagPointerType: {
-        // Priority 1: read the value of the pointer itself
-        lgdb_read_buffer_from_process(
-            ctx,
-            (uint64_t)lgdb_get_real_symbol_address(ctx, &sym),
-            sym.size,
-            sym.debugger_bytes_ptr);
-
-        // Priority 2: read the array of values that are being pointed
-        if (open) {
-            lgdb_symbol_type_t *pointed_type = lgdb_get_type(ctx, type->uinfo.pointer_type.type_index);
-            uint64_t pointer_value = *(uint64_t *)sym.debugger_bytes_ptr;
-
-            if (!sub_start) {
-                inspecting_count = requested;
-
-                sub_start = (variable_info_t *)lgdb_lnmalloc(
-                    info_alloc,
-                    sizeof(variable_info_t) * inspecting_count);
-
-                memset(sub_start, 0, sizeof(variable_info_t) * inspecting_count);
-
-                { // Initialise the linked list
-                    auto *sub = sub_start;
-                    sub->count_in_buffer = requested;
-                    sub->sym.real_addr = pointer_value;
-                    sub->sym.type_index = pointed_type->index;
-
-                    sub_end = sub + (inspecting_count - 1);
-
-                    uint64_t current_ptr = pointer_value + pointed_type->size;
-                    for (uint32_t i = 1; i < inspecting_count; ++i) {
-                        sub->sym.real_addr = current_ptr;
-                        sub->sym.type_index = pointed_type->index;
-                        sub->count_in_buffer = -1;
-
-                        sub->next = sub + 1;
-                        sub = sub->next;
-                        current_ptr += pointed_type->size;
-                    }
-
-                    sub->next = NULL;
-                }
-
-                /* Only read in all the values if this isn't a composed type */
-                if (pointed_type->tag != SymTagUDT && pointed_type->tag != SymTagArrayType) {
-                    void *copy_buffer = lgdb_lnmalloc(
-                        copy_alloc,
-                        pointed_type->size * requested);
-
-                    lgdb_read_buffer_from_process(
-                        ctx,
-                        pointer_value,
-                        pointed_type->size * requested,
-                        copy_buffer);
-
-                    auto *sub = sub_start;
-                    for (uint32_t i = 0; i < inspecting_count; ++i) {
-                        sub[i].sym.debugger_bytes_ptr = (uint8_t *)copy_buffer + pointed_type->size * i;
-                    }
-                }
-            }
-            else {
-                // Go through each buffer
-                if (requested > inspecting_count) {
-                    // We need to allocate a new buffer
-                    /* Add some more */
-                    uint32_t diff = requested - inspecting_count;
-                    auto *original_sub_end = sub_end->next = (variable_info_t *)lgdb_lnmalloc(info_alloc, sizeof(variable_info_t) * diff);
-                    memset(sub_end->next, 0, sizeof(variable_info_t) * diff);
-
-                    { // Initialise the linked list from here
-                        uint64_t current_ptr = pointer_value + inspecting_count * pointed_type->size;
-
-                        auto *sub = sub_end->next, *start = sub_end->next;
-                        sub_end = sub + (diff - 1);
-
-                        for (uint32_t i = 0; i < diff; ++i) {
-                            sub->sym.real_addr = current_ptr;
-                            sub->sym.type_index = pointed_type->index;
-                            sub->count_in_buffer = -1;
-
-                            sub->next = sub + 1;
-                            sub = sub->next;
-
-                            current_ptr += pointed_type->size;
-                        }
-
-                        start->count_in_buffer = diff;
-                        sub_end->next = NULL;
-                    }
-
-                    if (pointed_type->tag != SymTagUDT && pointed_type->tag != SymTagArrayType) {
-                        void *copy_buffer = lgdb_lnmalloc(
-                            copy_alloc,
-                            pointed_type->size * diff);
-
-                        lgdb_read_buffer_from_process(
-                            ctx,
-                            pointer_value + inspecting_count * pointed_type->size,
-                            pointed_type->size * diff,
-                            copy_buffer);
-
-                        auto *sub = original_sub_end;
-                        for (uint32_t i = 0; i < diff; ++i) {
-                            sub[i].sym.debugger_bytes_ptr = (uint8_t *)copy_buffer + pointed_type->size * i;
-                        }
-                    }
-
-                    inspecting_count = requested;
-                }
-            }
-        }
-    } break;
-    }
 }

@@ -87,7 +87,7 @@ void lgdb_handle_create_process_debug_event(struct lgdb_process_ctx *ctx) {
     }
 
     ctx->entry_point = lgdb_find_entry_point(ctx);
-    uint32_t name_len = strlen(ctx->entry_point.function_name);
+    uint32_t name_len = (uint32_t)strlen(ctx->entry_point.function_name);
     char *name_copy = (char *)malloc(sizeof(char) * (name_len + 1));
     memcpy(name_copy, ctx->entry_point.function_name, name_len + 1);
     ctx->entry_point.function_name = name_copy;

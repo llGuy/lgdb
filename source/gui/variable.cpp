@@ -23,6 +23,7 @@ void variable_info_t::init(
     sym.debugger_bytes_ptr = data;
     sym.user_flags = 0;
 
+    first_sub_open = NULL;
     sub_start = NULL;
 }
 
@@ -59,6 +60,7 @@ void variable_info_t::deep_sync_pointer(
                 auto *sub = sub_start;
                 sub->count_in_buffer = requested;
                 sub->sym.real_addr = pointer_value;
+                sub->sym.size = pointed_type->size;
                 sub->sym.type_index = pointed_type->index;
 
                 sub_end = sub + (requested - 1);
@@ -68,6 +70,7 @@ void variable_info_t::deep_sync_pointer(
                     sub->sym.real_addr = current_ptr;
                     sub->sym.type_index = pointed_type->index;
                     sub->count_in_buffer = -1;
+                    sub->sym.size = pointed_type->size;
 
                     sub->next = sub + 1;
                     sub = sub->next;
@@ -113,6 +116,7 @@ void variable_info_t::deep_sync_pointer(
 
                 for (uint32_t i = 0; i < diff; ++i) {
                     sub->sym.real_addr = current_ptr;
+                    sub->sym.size = pointed_type->size;
                     sub->sym.type_index = pointed_type->index;
                     sub->count_in_buffer = -1;
 
@@ -147,7 +151,15 @@ void variable_info_t::deep_sync_pointer(
             requested = 0;
         }
         else {
-            if (pointed_type->tag != SymTagUDT && pointed_type->tag != SymTagArrayType) {
+            if (pointed_type->tag == SymTagUDT || pointed_type->tag == SymTagArrayType) {
+                for (
+                    auto *current_open = first_sub_open;
+                    current_open;
+                    current_open = current_open->next_open) {
+                    current_open->deep_sync(ctx, info_alloc, copy_alloc);
+                }
+            }
+            else {
                 uint32_t i = 0;
                 auto *sub = sub_start;
 
@@ -183,6 +195,10 @@ void variable_info_t::deep_sync_udt(
     if (open) {
         uint64_t process_addr = (uint64_t)lgdb_get_real_symbol_address(ctx, &sym);
 
+        if (!sym.debugger_bytes_ptr) {
+            sym.debugger_bytes_ptr = lgdb_lnmalloc(copy_alloc, sym.size);
+        }
+
         if (!updated_memory) {
             lgdb_read_buffer_from_process(
                 ctx,
@@ -193,11 +209,23 @@ void variable_info_t::deep_sync_udt(
 
         updated_memory = 0;
 
-        if (!sub_start) {
+        if (sub_start) {
+            // Update all the sub variables
+            assert(count_in_buffer != -1);
+            for (uint32_t i = 0; i < (uint32_t)count_in_buffer; ++i) {
+
+                auto *current_info = &sub_start[i];
+                current_info->updated_memory = 1; // We don't want these vars to read from process memory
+                current_info->deep_sync(ctx, info_alloc, copy_alloc);
+
+            }
+        }
+        else {
             // Allocate sub variable_infos
             uint32_t base_class_count = type->uinfo.udt_type.base_classes_count;
             uint32_t member_var_count = type->uinfo.udt_type.member_var_count;
             uint32_t sub_count = base_class_count + member_var_count;
+            count_in_buffer = sub_count;
 
             variable_info_t *current_sub = sub_start =
                 (variable_info_t *)lgdb_lnmalloc(info_alloc, sizeof(variable_info_t) * sub_count);
@@ -208,11 +236,31 @@ void variable_info_t::deep_sync_udt(
             for (uint32_t i = 0; i < base_class_count; ++i) {
                 lgdb_base_class_t *base_class = &type->uinfo.udt_type.base_classes_type_idx[i];
 
+                current_sub[i].open = 0;
                 current_sub[i].count_in_buffer = -1;
-                current_sub[i].sym.real_addr;
+                current_sub[i].sym.real_addr = current_process_addr;
+                current_sub[i].sym.type_index = base_class->type_idx;
+                current_sub[i].sym.size = base_class->size;
+                current_sub[i].sym.debugger_bytes_ptr = (void *)current_dbg_ptr;
 
                 current_dbg_ptr += base_class->size;
                 current_process_addr = base_class->size;
+            }
+
+            current_sub += base_class_count;
+
+            for (uint32_t i = 0; i < member_var_count; ++i) {
+                lgdb_member_var_t *member_var = &type->uinfo.udt_type.member_vars_type_idx[i];
+
+                current_sub[i].open = 0;
+                current_sub[i].count_in_buffer = -1;
+                current_sub[i].sym.real_addr = current_process_addr;
+                current_sub[i].sym.type_index = member_var->type_idx;
+                current_sub[i].sym.size = member_var->size;
+                current_sub[i].sym.debugger_bytes_ptr = (void *)current_dbg_ptr;
+
+                current_dbg_ptr += member_var->size;
+                current_process_addr = member_var->size;
             }
         }
     }
@@ -235,11 +283,15 @@ void variable_info_t::deep_sync(
     } break;
 
     default: {
-        lgdb_read_buffer_from_process(
-            ctx,
-            (uint64_t)lgdb_get_real_symbol_address(ctx, &sym),
-            sym.size,
-            sym.debugger_bytes_ptr);
+        if (!updated_memory) {
+            lgdb_read_buffer_from_process(
+                ctx,
+                (uint64_t)lgdb_get_real_symbol_address(ctx, &sym),
+                sym.size,
+                sym.debugger_bytes_ptr);
+        }
+
+        updated_memory = 0;
     };
     }
 }

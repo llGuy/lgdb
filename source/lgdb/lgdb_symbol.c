@@ -668,6 +668,7 @@ void *lgdb_get_real_symbol_address(struct lgdb_process_ctx *ctx, lgdb_symbol_t *
     }
     else {
         /* Just get the raw address */
+        base = sym->real_addr;
     }
 
     void *addr = (void *)(base + sym->start_addr);

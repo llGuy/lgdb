@@ -19,6 +19,8 @@ int main() {
 
     printf("Hello debugger\n");
 
+    udt_t udt_on_stack = {42, 314, 12, 42.42f};
+
     udt_t *udt_pointer = (udt_t *)malloc(sizeof(udt_t) * 10);
 
     for (uint32_t i = 0; i < 10; ++i) {

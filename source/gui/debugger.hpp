@@ -196,8 +196,8 @@ private:
 
     /* Returns true if uncollapsed */
     bool render_composed_var_row(const char *name, const char *type, uint32_t size);
-    void render_symbol_base_type_data(const char *name, const char *type_name, void *address, uint32_t size, lgdb_symbol_type_t *type);
-    void render_symbol_type_data(
+    bool render_symbol_base_type_data(const char *name, const char *type_name, void *address, uint32_t size, lgdb_symbol_type_t *type);
+    bool render_symbol_type_data(
         variable_info_t *info,
         const char *name,
         const char *type_name,

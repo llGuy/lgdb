@@ -315,7 +315,7 @@ void debugger_t::tick(ImGuiID main) {
 }
 
 
-void debugger_t::render_symbol_base_type_data(const char *name, const char *type_name, void *address, uint32_t size, lgdb_symbol_type_t *type) {
+bool debugger_t::render_symbol_base_type_data(const char *name, const char *type_name, void *address, uint32_t size, lgdb_symbol_type_t *type) {
     const char *type_name_actual = type_name;
     if (!type_name)
         type_name_actual = lgdb_get_base_type_string(type->uinfo.base_type.base_type);
@@ -355,6 +355,9 @@ void debugger_t::render_symbol_base_type_data(const char *name, const char *type
     else {
         assert(0);
     }
+
+    // This will always return 0
+    return 0;
 }
 
 
@@ -385,7 +388,7 @@ bool debugger_t::render_composed_var_row(const char *name, const char *type, uin
 }
 
 
-void debugger_t::render_symbol_type_data(
+bool debugger_t::render_symbol_type_data(
     variable_info_t *var,
     const char *sym_name,
     const char *type_name,
@@ -393,40 +396,47 @@ void debugger_t::render_symbol_type_data(
     uint32_t size,
     lgdb_symbol_type_t *type) {
     switch (type->tag) {
-    case SymTagBaseType: render_symbol_base_type_data(
+    case SymTagBaseType: return render_symbol_base_type_data(
         sym_name,
         type_name,
         address,
         size,
-        type); break;
+        type);
 
     case SymTagTypedef: {
         lgdb_symbol_type_t *typedefed_type = lgdb_get_type(shared_->ctx, type->uinfo.typedef_type.type_index);
-        render_symbol_type_data(var, sym_name, type->name, address, size, typedefed_type);
-
-        break;
+        return render_symbol_type_data(var, sym_name, type->name, address, size, typedefed_type);
     };
 
     case SymTagUDT: {
         bool opened = render_composed_var_row(sym_name, type->name, size);
 
+        if (!var->open && opened) {
+            var->open = 1;
+            var->requested = 1;
+            var->deep_sync(shared_->ctx, &variable_info_allocator_, &variable_copy_allocator_);
+        }
+
         if (opened) {
+            variable_info_t *info = &var->sub_start[0];
             for (uint32_t i = 0; i < type->uinfo.udt_type.base_classes_count; ++i) {
                 lgdb_base_class_t *base_class = &type->uinfo.udt_type.base_classes_type_idx[i];
                 lgdb_symbol_type_t *base_class_type = lgdb_get_type(shared_->ctx, base_class->type_idx);
-                render_symbol_type_data(var, base_class_type->name, base_class_type->name, (uint8_t *)address + base_class->offset, base_class->size, base_class_type);
+                render_symbol_type_data(info, base_class_type->name, base_class_type->name, info->sym.debugger_bytes_ptr, base_class->size, base_class_type);
+                info++;
             }
 
             for (uint32_t i = 0; i < type->uinfo.udt_type.member_var_count; ++i) {
                 lgdb_member_var_t *member_var = &type->uinfo.udt_type.member_vars_type_idx[i];
                 lgdb_symbol_type_t *member_type = lgdb_get_type(shared_->ctx, member_var->type_idx);
-                render_symbol_type_data(var, member_var->name, member_type->name, (uint8_t *)address + member_var->offset, member_var->size, member_type);
+                render_symbol_type_data(info, member_var->name, member_type->name, info->sym.debugger_bytes_ptr, member_var->size, member_type);
+                info++;
             }
 
             ImGui::TreePop();
         }
 
-        break;
+        return opened;
     };
 
     case SymTagArrayType: {
@@ -453,7 +463,7 @@ void debugger_t::render_symbol_type_data(
             ImGui::TreePop();
         }
 
-        break;
+        return opened;
     };
 
     case SymTagEnum: {
@@ -491,7 +501,7 @@ void debugger_t::render_symbol_type_data(
         ImGui::TableSetColumnIndex(3);
         ImGui::Text("%d", size);
 
-        break;
+        return 0;
     };
 
     case SymTagPointerType: {
@@ -543,18 +553,64 @@ void debugger_t::render_symbol_type_data(
             char name_buf[15] = {};
 
             uint32_t i = 0;
+            variable_info_t *prev_open = var->first_sub_open;
             for (auto *sub = var->sub_start; sub; sub = sub->next) {
                 lgdb_symbol_type_t *type = lgdb_get_type(shared_->ctx, sub->sym.type_index);
                 sprintf(name_buf, "[%d]", i);
-                render_symbol_type_data(sub, name_buf, type->name, sub->sym.debugger_bytes_ptr, type->size, type);
+
+                bool was_open = sub->open;
+
+                bool opened_sub = render_symbol_type_data(
+                    sub,
+                    name_buf,
+                    type->name,
+                    sub->sym.debugger_bytes_ptr,
+                    type->size, type);
+
+                bool need_to_update_openness = !was_open && opened_sub;
+
+                if (opened_sub) {
+                    if (!was_open) {
+                        sub->open = 1;
+
+                        // The first element of the linked list hasn't been initialised
+                        if (!prev_open) {
+                            prev_open = var->first_sub_open = sub;
+                        }
+                        else {
+                            variable_info_t *next_open = prev_open->next_open;
+
+                            prev_open->next_open = sub;
+                            sub->next_open = next_open;
+                        }
+                    }
+
+                    prev_open = sub;
+                }
+                else {
+                    if (was_open) {
+                        sub->open = 0;
+
+                        if (var->first_sub_open == sub) {
+                            var->first_sub_open = NULL;
+                        }
+                        else {
+                            prev_open->next_open = sub->next_open;
+                            sub->open = NULL;
+                        }
+                    }
+                }
+
                 ++i;
             }
 
             ImGui::TreePop();
         }
+
+        return opened;
     };
 
-    default: {};
+    default: return 0;
     }
 }
 

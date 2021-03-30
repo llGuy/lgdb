@@ -5,6 +5,8 @@
 struct udt_t {
     uint32_t abba, babba, cabba;
     float fabba;
+
+    uint32_t *ptr;
 };
 
 int main() {
@@ -24,7 +26,7 @@ int main() {
     udt_t *udt_pointer = (udt_t *)malloc(sizeof(udt_t) * 10);
 
     for (uint32_t i = 0; i < 10; ++i) {
-        udt_pointer[i] = { i * 12, 42, (i + 12) / 2, 3.1415f * (float)(i +1) };
+        udt_pointer[i] = { i * 12, 42, (i + 12) / 2, 3.1415f * (float)(i +1), new uint32_t(i * 12)};
     }
 
     printf("Hello debugger again\n");

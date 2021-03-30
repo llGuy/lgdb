@@ -229,6 +229,7 @@ void variable_info_t::deep_sync_udt(
 
             variable_info_t *current_sub = sub_start =
                 (variable_info_t *)lgdb_lnmalloc(info_alloc, sizeof(variable_info_t) * sub_count);
+            memset(current_sub, 0, sizeof(variable_info_t) * sub_count);
 
             uint8_t *current_dbg_ptr = (uint8_t *)sym.debugger_bytes_ptr;
             uint64_t current_process_addr = process_addr;
@@ -242,6 +243,7 @@ void variable_info_t::deep_sync_udt(
                 current_sub[i].sym.type_index = base_class->type_idx;
                 current_sub[i].sym.size = base_class->size;
                 current_sub[i].sym.debugger_bytes_ptr = (void *)current_dbg_ptr;
+                current_sub[i].sym.user_flags = 0;
 
                 current_dbg_ptr += base_class->size;
                 current_process_addr = base_class->size;
@@ -258,6 +260,7 @@ void variable_info_t::deep_sync_udt(
                 current_sub[i].sym.type_index = member_var->type_idx;
                 current_sub[i].sym.size = member_var->size;
                 current_sub[i].sym.debugger_bytes_ptr = (void *)current_dbg_ptr;
+                current_sub[i].sym.user_flags = 0;
 
                 current_dbg_ptr += member_var->size;
                 current_process_addr = member_var->size;

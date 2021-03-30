@@ -422,6 +422,7 @@ bool debugger_t::render_symbol_type_data(
             for (uint32_t i = 0; i < type->uinfo.udt_type.base_classes_count; ++i) {
                 lgdb_base_class_t *base_class = &type->uinfo.udt_type.base_classes_type_idx[i];
                 lgdb_symbol_type_t *base_class_type = lgdb_get_type(shared_->ctx, base_class->type_idx);
+                info->updated_memory = 1;
                 render_symbol_type_data(info, base_class_type->name, base_class_type->name, info->sym.debugger_bytes_ptr, base_class->size, base_class_type);
                 info++;
             }
@@ -429,6 +430,7 @@ bool debugger_t::render_symbol_type_data(
             for (uint32_t i = 0; i < type->uinfo.udt_type.member_var_count; ++i) {
                 lgdb_member_var_t *member_var = &type->uinfo.udt_type.member_vars_type_idx[i];
                 lgdb_symbol_type_t *member_type = lgdb_get_type(shared_->ctx, member_var->type_idx);
+                info->updated_memory = 1;
                 render_symbol_type_data(info, member_var->name, member_type->name, info->sym.debugger_bytes_ptr, member_var->size, member_type);
                 info++;
             }

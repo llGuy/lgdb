@@ -22,7 +22,12 @@ public:
         lgdb_linear_allocator_t *info_alloc,
         lgdb_linear_allocator_t *copy_alloc);
 
-    void tick();
+    void tick(
+        const char *sym_name,
+        const char *type_name,
+        void *address,
+        uint32_t size,
+        lgdb_symbol_type_t *type);
 
 private:
 
@@ -36,6 +41,34 @@ private:
         lgdb_process_ctx_t *ctx,
         lgdb_linear_allocator_t *info_alloc,
         lgdb_linear_allocator_t *copy_alloc,
+        lgdb_symbol_type_t *type);
+
+    // Will always be at the end of the recursive loops
+    bool tick_symbol_base_type_data(
+        const char *name,
+        const char *type_name
+        void *address,
+        uint32_t size,
+        lgdb_symbol_type_t *type);
+
+    // Needs to be something like: [name] | {...} | [type] | [size]
+    bool render_composed_var_row(
+        const char *name,
+        const char *type,
+        uint32_t size);
+
+    bool tick_udt(
+        const char *sym_name,
+        const char *type_name,
+        void *address,
+        uint32_t size,
+        lgdb_symbol_type_t *type);
+
+    bool tick_array(
+        const char *sym_name,
+        const char *type_name,
+        void *address,
+        uint32_t size,
         lgdb_symbol_type_t *type);
 
 public: // Temporarily public

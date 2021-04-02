@@ -147,12 +147,13 @@ void debugger_t::init() {
     current_watch_frame_idx_ = -1;
 
     variable_info_allocator_ = lgdb_create_linear_allocator((uint32_t)lgdb_megabytes(1));
-    variable_copy_allocator_ = lgdb_create_linear_allocator((uint32_t)lgdb_megabytes(1));
+    var_copy_.init((uint32_t)lgdb_megabytes(1));
 
     is_process_suspended_ = 0;
     changed_frame_ = 0;
 
     popups_.reserve(20);
+    modified_vars_.reserve(40);
 }
 
 
@@ -164,7 +165,7 @@ void debugger_t::tick(ImGuiID main) {
     // Sorry
     for (uint32_t i = 0; i < popups_.size(); ++i) {
         popup_t *p = popups_[i];
-        if (p->update(shared_->ctx, &variable_info_allocator_, &variable_copy_allocator_)) {
+        if (p->update(shared_->ctx, &variable_info_allocator_, &var_copy_, &modified_vars_)) {
             delete p;
             popups_.erase(popups_.begin() + i);
         }
@@ -232,26 +233,23 @@ void debugger_t::tick(ImGuiID main) {
                     ImGui::TextUnformatted("--");
 
                     if (opened) {
+                        variable_tick_info_t tick_info = {};
+                        tick_info.ctx = shared_->ctx;
+                        tick_info.info_alloc = &variable_info_allocator_;
+                        tick_info.copy = &var_copy_;
+                        tick_info.popups = &popups_;
+                        tick_info.modified_vars = &modified_vars_;
 
                         for (uint32_t i = 0; i < watch_frame->var_count; i++) {
                             variable_info_t *var = watch_frame->symbol_ptr_pool_start[i];
 
-                            var->tick(
-                                var->sym.name,
-                                NULL,
-                                var->sym.debugger_bytes_ptr,
-                                var->sym.size,
-                                lgdb_get_type(shared_->ctx, var->sym.type_index));
+                            tick_info.sym_name = var->sym.name;
+                            tick_info.type_name = NULL;
+                            tick_info.address = var->sym.dbg_offset;
+                            tick_info.size = var->sym.size;
+                            tick_info.type = lgdb_get_type(shared_->ctx, var->sym.type_index);
 
-#if 0
-                            render_symbol_type_data(
-                                var,
-                                var->sym.name,
-                                NULL,
-                                var->sym.debugger_bytes_ptr,
-                                var->sym.size,
-                                lgdb_get_type(shared_->ctx, var->sym.type_index));
-#endif
+                            var->tick(&tick_info);
                         }
 
                         ImGui::TreePop();
@@ -677,7 +675,7 @@ void debugger_t::update_local_symbol(
             &dbg->variable_info_allocator_,
             sizeof(variable_info_t));
 
-        var->init(name, &dbg->variable_info_allocator_, &dbg->variable_copy_allocator_, sym);
+        var->init(name, &dbg->variable_info_allocator_, &dbg->var_copy_, sym);
 
         /* Registers the type if it hasn't already been registered */
         lgdb_symbol_type_t *type = lgdb_get_type(ctx, var->sym.type_index);
@@ -689,7 +687,7 @@ void debugger_t::update_local_symbol(
         var = entry->second;
     }
 
-    var->deep_sync(ctx, &dbg->variable_info_allocator_, &dbg->variable_copy_allocator_);
+    var->deep_sync(ctx, &dbg->variable_info_allocator_, &dbg->var_copy_, &dbg->modified_vars_);
 
     frame->symbol_ptr_pool_start[frame->var_count++] = var;
 }
@@ -709,6 +707,9 @@ void debugger_t::update_call_stack(lgdb_process_ctx_t *ctx, void *obj, lgdb_call
 
 
 void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
+    var_copy_.swap();
+    clear_modified_variables();
+
     uint64_t new_frame = lgdb_update_symbol_context(ctx);
     watch_frame_t *watch_frame = NULL;
 
@@ -770,4 +771,13 @@ void debugger_t::update_locals(lgdb_process_ctx_t *ctx) {
 void debugger_t::update_call_stack() {
     call_stack_.clear();
     lgdb_update_call_stack(shared_->ctx, this, debugger_t::update_call_stack);
+}
+
+
+void debugger_t::clear_modified_variables() {
+    for (auto var : modified_vars_) {
+        var->modified = 0;
+    }
+
+    modified_vars_.clear();
 }

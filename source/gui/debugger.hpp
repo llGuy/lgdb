@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <fstream>
 
+#include "swap.hpp"
 #include "variable.hpp"
 
 extern "C" {
@@ -109,7 +110,11 @@ struct watch_frame_t {
 class popup_t {
 public:
     virtual ~popup_t() {};
-    virtual bool update(lgdb_process_ctx_t *ctx, lgdb_linear_allocator_t *info_alloc, lgdb_linear_allocator_t *copy_alloc) = 0;
+    virtual bool update(
+        lgdb_process_ctx_t *ctx,
+        lgdb_linear_allocator_t *info_alloc,
+        var_swapchain_t *copy_alloc,
+        std::vector<variable_info_t *> *modified_vars) = 0;
 };
 
 
@@ -121,7 +126,11 @@ public:
 
     ~popup_view_count_t() = default;
 
-    bool update(lgdb_process_ctx_t *ctx, lgdb_linear_allocator_t *info_alloc, lgdb_linear_allocator_t *copy_alloc) override {
+    bool update(
+        lgdb_process_ctx_t *ctx,
+        lgdb_linear_allocator_t *info_alloc,
+        var_swapchain_t *copy_alloc,
+        std::vector<variable_info_t *> *modified_vars) override {
         if (open_popup_) {
             ImGui::OpenPopup(popup_name_);
             open_popup_ = 0;
@@ -132,7 +141,7 @@ public:
 
             if (ImGui::InputText("Count", count_str, 4, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 info_->requested = strtol(count_str, NULL, 10);
-                info_->deep_sync(ctx, info_alloc, copy_alloc);
+                info_->deep_sync(ctx, info_alloc, copy_alloc, modified_vars);
 
                 ImGui::CloseCurrentPopup();
                 ImGui::EndPopup();
@@ -144,7 +153,7 @@ public:
 
             if (ImGui::Button("OK")) {
                 info_->requested = strtol(count_str, NULL, 10);
-                info_->deep_sync(ctx, info_alloc, copy_alloc);
+                info_->deep_sync(ctx, info_alloc, copy_alloc, modified_vars);
                 ImGui::CloseCurrentPopup();
 
                 return 1;
@@ -211,6 +220,7 @@ private:
     void restore_current_file();
     void update_locals(lgdb_process_ctx_t *ctx);
     void update_call_stack();
+    void clear_modified_variables();
 
 private:
 
@@ -245,7 +255,7 @@ private:
     lgdb_linear_allocator_t variable_info_allocator_;
 
     /* Contains a copy of the variables */
-    lgdb_linear_allocator_t variable_copy_allocator_;
+    var_swapchain_t var_copy_;
 
     bool creating_new_frame_;
     bool is_process_suspended_;
@@ -254,6 +264,7 @@ private:
     bool changed_frame_;
 
     std::vector<popup_t *> popups_;
+    std::vector<variable_info_t *> modified_vars_;
 
 public:
 

@@ -116,8 +116,11 @@ typedef struct lgdb_symbol {
     char *name;
 
     /* Pointer in debugger address space */
-    void *debugger_bytes_ptr;
-    void *additional_ptr;
+    union {
+        void *debugger_bytes_ptr;
+        uint32_t dbg_offset;
+    };
+    // void *additional_ptr;
     /* User is free to use these flags */
     uint32_t user_flags;
 } lgdb_symbol_t;

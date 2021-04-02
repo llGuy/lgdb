@@ -1,15 +1,20 @@
 #define _NO_CVCONST_H
+#define _CRT_SECURE_NO_WARNINGS
 
 #include <Windows.h>
 #include <DbgHelp.h>
 #include <TypeInfoStructs.h>
 #include "variable.hpp"
 
+#include <imgui.h>
+#include <stdio.h>
+#include "debugger.hpp"
+
 
 void variable_info_t::init(
     const char *name,
     lgdb_linear_allocator_t *info_alloc,
-    lgdb_linear_allocator_t *copy_alloc,
+    var_swapchain_t *copy_alloc,
     lgdb_symbol_t *symbol) {
     sym = *symbol;
     open = 0;
@@ -19,35 +24,45 @@ void variable_info_t::init(
     memcpy(sym.name, name, name_len * sizeof(char));
     sym.name[name_len] = 0;
 
-    void *data = lgdb_lnmalloc(copy_alloc, sym.size);
-    sym.debugger_bytes_ptr = data;
+    sym.dbg_offset = copy_alloc->allocate(sym.size);
     sym.user_flags = 0;
 
     first_sub_open = NULL;
     sub_start = NULL;
+    modified = 0;
 }
 
 
 void variable_info_t::deep_sync_pointer(
     lgdb_process_ctx_t *ctx,
     lgdb_linear_allocator_t *info_alloc,
-    lgdb_linear_allocator_t *copy_alloc,
+    var_swapchain_t *copy_alloc,
+    std::vector<variable_info_t *> *modified_vars,
     lgdb_symbol_type_t *type) {
+    void *dbg_ptr = copy_alloc->get_address(sym.dbg_offset);
+
     // Priority 1: read the value of the pointer itself
     if (!updated_memory) {
         lgdb_read_buffer_from_process(
             ctx,
             (uint64_t)lgdb_get_real_symbol_address(ctx, &sym),
             sym.size,
-            sym.debugger_bytes_ptr);
+            dbg_ptr);
     }
 
     updated_memory = 0;
 
+    const uint64_t pointer_value = *(uint64_t *)dbg_ptr;
+    const uint64_t previous_pointer_value = *(uint64_t *)copy_alloc->get_address_prev(sym.dbg_offset);
+
+    if (pointer_value != previous_pointer_value) {
+        modified = 1;
+        modified_vars->push_back(this);
+    }
+
     // Priority 2: read the array of values that are being pointed
     if (open) {
         lgdb_symbol_type_t *pointed_type = lgdb_get_type(ctx, type->uinfo.pointer_type.type_index);
-        const uint64_t pointer_value = *(uint64_t *)sym.debugger_bytes_ptr;
 
         if (!sub_start) {
             sub_start = (variable_info_t *)lgdb_lnmalloc(
@@ -82,9 +97,8 @@ void variable_info_t::deep_sync_pointer(
 
             /* Only read in all the values if this isn't a composed type */
             if (pointed_type->tag != SymTagUDT && pointed_type->tag != SymTagArrayType) {
-                void *copy_buffer = lgdb_lnmalloc(
-                    copy_alloc,
-                    pointed_type->size * requested);
+                copy_offset_t copy_offset = copy_alloc->allocate(pointed_type->size * requested);
+                void *copy_buffer = copy_alloc->get_address(copy_offset);
 
                 lgdb_read_buffer_from_process(
                     ctx,
@@ -94,7 +108,7 @@ void variable_info_t::deep_sync_pointer(
 
                 auto *sub = sub_start;
                 for (uint32_t i = 0; i < requested; ++i) {
-                    sub[i].sym.debugger_bytes_ptr = (uint8_t *)copy_buffer + pointed_type->size * i;
+                    sub[i].sym.dbg_offset = copy_offset + pointed_type->size * i;
                 }
             }
 
@@ -131,9 +145,8 @@ void variable_info_t::deep_sync_pointer(
             }
 
             if (pointed_type->tag != SymTagUDT && pointed_type->tag != SymTagArrayType) {
-                void *copy_buffer = lgdb_lnmalloc(
-                    copy_alloc,
-                    pointed_type->size * diff);
+                copy_offset_t copy_offset = copy_alloc->allocate(pointed_type->size * diff);
+                void *copy_buffer = copy_alloc->get_address(copy_offset);
 
                 lgdb_read_buffer_from_process(
                     ctx,
@@ -143,7 +156,7 @@ void variable_info_t::deep_sync_pointer(
 
                 auto *sub = original_sub_end;
                 for (uint32_t i = 0; i < diff; ++i) {
-                    sub[i].sym.debugger_bytes_ptr = (uint8_t *)copy_buffer + pointed_type->size * i;
+                    sub[i].sym.dbg_offset = copy_offset + pointed_type->size * i;
                 }
             }
 
@@ -151,12 +164,21 @@ void variable_info_t::deep_sync_pointer(
             requested = 0;
         }
         else {
+            // If the address has changed, we need to completely change everything...
+            if (modified) {
+                uint64_t current_pointer_value = pointer_value;
+                for (auto *sub = sub_start; sub; sub = sub->next) {
+                    sub->sym.real_addr = current_pointer_value;
+                    current_pointer_value += sub->sym.size;
+                }
+            }
+
             if (pointed_type->tag == SymTagUDT || pointed_type->tag == SymTagArrayType) {
                 for (
                     auto *current_open = first_sub_open;
                     current_open;
                     current_open = current_open->next_open) {
-                    current_open->deep_sync(ctx, info_alloc, copy_alloc);
+                    current_open->deep_sync(ctx, info_alloc, copy_alloc, modified_vars);
                 }
             }
             else {
@@ -170,7 +192,7 @@ void variable_info_t::deep_sync_pointer(
                             ctx,
                             pointer_value + i * pointed_type->size,
                             pointed_type->size * count_in_buffer,
-                            sub->sym.debugger_bytes_ptr);
+                            copy_alloc->get_address(sub->sym.dbg_offset));
 
                         auto *sub_end_in_buffer = sub + (count_in_buffer - 1);
                         sub = sub_end_in_buffer->next;
@@ -190,21 +212,24 @@ void variable_info_t::deep_sync_pointer(
 void variable_info_t::deep_sync_udt(
     lgdb_process_ctx_t *ctx,
     lgdb_linear_allocator_t *info_alloc,
-    lgdb_linear_allocator_t *copy_alloc,
+    var_swapchain_t *copy_alloc,
+    std::vector<variable_info_t *> *modified_vars,
     lgdb_symbol_type_t *type) {
     if (open) {
         uint64_t process_addr = (uint64_t)lgdb_get_real_symbol_address(ctx, &sym);
 
-        if (!sym.debugger_bytes_ptr) {
-            sym.debugger_bytes_ptr = lgdb_lnmalloc(copy_alloc, sym.size);
+        if (!sym.dbg_offset) {
+            sym.dbg_offset = copy_alloc->allocate(sym.size);
         }
+
+        void *dbg_ptr = copy_alloc->get_address(sym.dbg_offset);
 
         if (!updated_memory) {
             lgdb_read_buffer_from_process(
                 ctx,
                 process_addr,
                 sym.size,
-                sym.debugger_bytes_ptr);
+                dbg_ptr);
         }
 
         updated_memory = 0;
@@ -216,7 +241,23 @@ void variable_info_t::deep_sync_udt(
 
                 auto *current_info = &sub_start[i];
                 current_info->updated_memory = 1; // We don't want these vars to read from process memory
-                current_info->deep_sync(ctx, info_alloc, copy_alloc);
+
+                if (current_info->sym.sym_tag == SymTagPointerType) {
+                    const uint64_t pointer_value = *(uint64_t *)copy_alloc->get_address(sym.dbg_offset);
+                    const uint64_t previous_pointer_value = *(uint64_t *)copy_alloc->get_address_prev(sym.dbg_offset);
+                    if (pointer_value != previous_pointer_value) {
+                        uint64_t current_pointer_value = pointer_value;
+                        for (auto *sub = current_info->sub_start; sub; sub = sub->next) {
+                            sub->sym.real_addr = current_pointer_value;
+                            current_pointer_value += sub->sym.size;
+                        }
+
+                        modified = 1;
+                        modified_vars->push_back(current_info);
+                    }
+                }
+
+                current_info->deep_sync(ctx, info_alloc, copy_alloc, modified_vars);
 
             }
         }
@@ -231,22 +272,18 @@ void variable_info_t::deep_sync_udt(
                 (variable_info_t *)lgdb_lnmalloc(info_alloc, sizeof(variable_info_t) * sub_count);
             memset(current_sub, 0, sizeof(variable_info_t) * sub_count);
 
-            uint8_t *current_dbg_ptr = (uint8_t *)sym.debugger_bytes_ptr;
-            uint64_t current_process_addr = process_addr;
+            copy_offset_t current_dbg_ptr = sym.dbg_offset;
 
             for (uint32_t i = 0; i < base_class_count; ++i) {
                 lgdb_base_class_t *base_class = &type->uinfo.udt_type.base_classes_type_idx[i];
 
                 current_sub[i].open = 0;
                 current_sub[i].count_in_buffer = -1;
-                current_sub[i].sym.real_addr = current_process_addr;
+                current_sub[i].sym.real_addr = process_addr + base_class->offset;
                 current_sub[i].sym.type_index = base_class->type_idx;
                 current_sub[i].sym.size = base_class->size;
-                current_sub[i].sym.debugger_bytes_ptr = (void *)current_dbg_ptr;
+                current_sub[i].sym.dbg_offset = sym.dbg_offset + base_class->offset;
                 current_sub[i].sym.user_flags = 0;
-
-                current_dbg_ptr += base_class->size;
-                current_process_addr = base_class->size;
             }
 
             current_sub += base_class_count;
@@ -256,14 +293,11 @@ void variable_info_t::deep_sync_udt(
 
                 current_sub[i].open = 0;
                 current_sub[i].count_in_buffer = -1;
-                current_sub[i].sym.real_addr = current_process_addr;
+                current_sub[i].sym.real_addr = process_addr + member_var->offset;
                 current_sub[i].sym.type_index = member_var->type_idx;
                 current_sub[i].sym.size = member_var->size;
-                current_sub[i].sym.debugger_bytes_ptr = (void *)current_dbg_ptr;
+                current_sub[i].sym.dbg_offset = sym.dbg_offset + member_var->offset;
                 current_sub[i].sym.user_flags = 0;
-
-                current_dbg_ptr += member_var->size;
-                current_process_addr = member_var->size;
             }
         }
     }
@@ -273,25 +307,33 @@ void variable_info_t::deep_sync_udt(
 void variable_info_t::deep_sync(
     lgdb_process_ctx_t *ctx,
     lgdb_linear_allocator_t *info_alloc,
-    lgdb_linear_allocator_t *copy_alloc) {
+    var_swapchain_t *copy_alloc,
+    std::vector<variable_info_t *> *modified_vars) {
     lgdb_symbol_type_t *type = lgdb_get_type(ctx, sym.type_index);
 
     switch (type->tag) {
     case SymTagUDT: {
-        deep_sync_udt(ctx, info_alloc, copy_alloc, type);
+        deep_sync_udt(ctx, info_alloc, copy_alloc, modified_vars, type);
     } break;
 
     case SymTagPointerType: {
-        deep_sync_pointer(ctx, info_alloc, copy_alloc, type);
+        deep_sync_pointer(ctx, info_alloc, copy_alloc, modified_vars, type);
     } break;
 
     default: {
+        void *current_addr = copy_alloc->get_address(sym.dbg_offset);
+        void *prev_addr = copy_alloc->get_address_prev(sym.dbg_offset);
         if (!updated_memory) {
             lgdb_read_buffer_from_process(
                 ctx,
                 (uint64_t)lgdb_get_real_symbol_address(ctx, &sym),
                 sym.size,
-                sym.debugger_bytes_ptr);
+                copy_alloc->get_address(sym.dbg_offset));
+        }
+
+        if (memcmp(current_addr, prev_addr, sym.size) != 0) {
+            modified = 1;
+            modified_vars->push_back(this);
         }
 
         updated_memory = 0;
@@ -300,48 +342,47 @@ void variable_info_t::deep_sync(
 }
 
 
-bool variable_info_t::tick_udt(
-    const char *sym_name,
-    const char *type_name,
-    void *address,
-    uint32_t size,
-    lgdb_symbol_type_t *type) {
-    bool opened = render_composed_var_row(sym_name, type->name, size);
+bool variable_info_t::tick_udt(variable_tick_info_t *tinfo) {
+    bool opened = render_composed_var_row(tinfo->sym_name, tinfo->type->name, tinfo->size);
 
-    if (!var->open && opened) {
-        var->open = 1;
-        var->requested = 1;
-        var->deep_sync(shared_->ctx, &variable_info_allocator_, &variable_copy_allocator_);
+    if (!open && opened) {
+        open = 1;
+        requested = 1;
+        deep_sync(tinfo->ctx, tinfo->info_alloc, tinfo->copy, tinfo->modified_vars);
     }
 
     if (opened) {
-        variable_info_t *info = &var->sub_start[0];
-        for (uint32_t i = 0; i < type->uinfo.udt_type.base_classes_count; ++i) {
-            lgdb_base_class_t *base_class = &type->uinfo.udt_type.base_classes_type_idx[i];
-            lgdb_symbol_type_t *base_class_type = lgdb_get_type(shared_->ctx, base_class->type_idx);
+        variable_info_t *info = &sub_start[0];
+        for (uint32_t i = 0; i < tinfo->type->uinfo.udt_type.base_classes_count; ++i) {
+            lgdb_base_class_t *base_class = &tinfo->type->uinfo.udt_type.base_classes_type_idx[i];
+            lgdb_symbol_type_t *base_class_type = lgdb_get_type(tinfo->ctx, base_class->type_idx);
             info->updated_memory = 1;
 
-            info->render_symbol_type_data(
-                base_class_type->name,
-                base_class_type->name,
-                info->sym.debugger_bytes_ptr,
-                base_class->size,
-                base_class_type);
+            variable_tick_info_t new_tinfo = *tinfo;
+            new_tinfo.sym_name = base_class_type->name;
+            new_tinfo.type_name = base_class_type->name;
+            new_tinfo.address = info->sym.dbg_offset;
+            new_tinfo.size = base_class->size;
+            new_tinfo.type = base_class_type;
+
+            info->tick(&new_tinfo);
 
             info++;
         }
 
-        for (uint32_t i = 0; i < type->uinfo.udt_type.member_var_count; ++i) {
-            lgdb_member_var_t *member_var = &type->uinfo.udt_type.member_vars_type_idx[i];
-            lgdb_symbol_type_t *member_type = lgdb_get_type(shared_->ctx, member_var->type_idx);
+        for (uint32_t i = 0; i < tinfo->type->uinfo.udt_type.member_var_count; ++i) {
+            lgdb_member_var_t *member_var = &tinfo->type->uinfo.udt_type.member_vars_type_idx[i];
+            lgdb_symbol_type_t *member_type = lgdb_get_type(tinfo->ctx, member_var->type_idx);
             info->updated_memory = 1;
 
-            info->render_symbol_type_data(
-                member_var->name,
-                member_type->name,
-                info->sym.debugger_bytes_ptr,
-                member_var->size,
-                member_type);
+            variable_tick_info_t new_tinfo = *tinfo;
+            new_tinfo.sym_name = member_var->name;
+            new_tinfo.type_name = member_type->name;
+            new_tinfo.address = info->sym.dbg_offset;
+            new_tinfo.size = member_var->size;
+            new_tinfo.type = member_type;
+
+            info->tick(&new_tinfo);
 
             info++;
         }
@@ -353,15 +394,10 @@ bool variable_info_t::tick_udt(
 }
 
 
-bool variable_info_t::tick_array(
-    const char *sym_name,
-    const char *type_name,
-    void *address,
-    uint32_t size,
-    lgdb_symbol_type_t *type) {
-    lgdb_symbol_type_t *arrayed_type = lgdb_get_type(shared_->ctx, type->uinfo.array_type.type_index);
+bool variable_info_t::tick_array(variable_tick_info_t *tinfo) {
+    lgdb_symbol_type_t *arrayed_type = lgdb_get_type(tinfo->ctx, tinfo->type->uinfo.array_type.type_index);
 
-    uint32_t element_count = size / arrayed_type->size;
+    uint32_t element_count = tinfo->size / arrayed_type->size;
 
     const char *arrayed_type_name = arrayed_type->name;
     if (arrayed_type->tag == SymTagBaseType) {
@@ -371,12 +407,20 @@ bool variable_info_t::tick_array(
     char buffer[50] = {};
     sprintf(buffer, "%s[%d]", arrayed_type_name, element_count);
 
-    bool opened = render_composed_var_row(sym_name, buffer, size);
+    bool opened = render_composed_var_row(tinfo->sym_name, buffer, tinfo->size);
 
     if (opened) {
         for (uint32_t i = 0; i < element_count && i < 30; ++i) {
             sprintf(buffer, "[%d]", i);
-            render_symbol_type_data(var, buffer, arrayed_type->name, (uint8_t *)address + arrayed_type->size * i, arrayed_type->size, arrayed_type);
+
+            variable_tick_info_t new_tinfo = *tinfo;
+            new_tinfo.sym_name = buffer;
+            new_tinfo.type_name = arrayed_type->name;
+            new_tinfo.address = tinfo->address + arrayed_type->size * i;
+            new_tinfo.size = arrayed_type->size;
+            new_tinfo.type = arrayed_type;
+
+            this->tick(&new_tinfo);
         }
 
         ImGui::TreePop();
@@ -386,187 +430,33 @@ bool variable_info_t::tick_array(
 }
 
 
-void variable_info_t::tick(
-    const char *sym_name,
-    const char *type_name,
-    void *address,
-    uint32_t size,
-    lgdb_symbol_type_t *type) {
-    switch (type->tag) {
+bool variable_info_t::tick(variable_tick_info_t *tinfo) {
+    switch (tinfo->type->tag) {
     case SymTagBaseType: {
-        return tick_symbol_base_type_data(
-            sym_name,
-            type_name,
-            address,
-            size,
-            type);
+        return tick_symbol_base_type_data(tinfo);
     }
 
     case SymTagTypedef: {
-        lgdb_symbol_type_t *typedefed_type = lgdb_get_type(shared_->ctx, type->uinfo.typedef_type.type_index);
-        return render_symbol_type_data(var, sym_name, type->name, address, size, typedefed_type);
+        lgdb_symbol_type_t *typedefed_type = lgdb_get_type(tinfo->ctx, tinfo->type->uinfo.typedef_type.type_index);
+        variable_tick_info_t new_tinfo = *tinfo;
+        new_tinfo.type = typedefed_type;
+        return tick(&new_tinfo);
     }
 
     case SymTagUDT: {
-        return tick_udt(
-            sym_name,
-            type_name,
-            address,
-            size,
-            type);
+        return tick_udt(tinfo);
     }
 
     case SymTagArrayType: {
-        return tick_array(
-            sym_name,
-            type_name,
-            address,
-            size,
-            type);
+        return tick_array(tinfo);
     }
 
     case SymTagEnum: {
-        lgdb_symbol_type_t *enum_type = lgdb_get_type(shared_->ctx, type->uinfo.enum_type.type_index);
-
-        int32_t bytes;
-
-        switch (size) {
-        case 1: bytes = *(int8_t *)address; break;
-        case 2: bytes = *(int16_t *)address; break;
-        case 4: bytes = *(int32_t *)address; break;
-        default: {
-            assert(0);
-        } break;
-        }
-
-        lgdb_entry_value_t *entry = lgdb_get_from_table(&type->uinfo.enum_type.value_to_name, bytes);
-
-        char *enum_value_name = NULL;
-
-        if (entry) {
-            enum_value_name = (char *)*entry;
-        }
-        else {
-            enum_value_name = "__UNKNOWN_ENUM__";
-        }
-
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        ImGui::TreeNodeEx(sym_name, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_Bullet | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanFullWidth);
-        ImGui::TableSetColumnIndex(1);
-        ImGui::Text("%s (%d)", enum_value_name, bytes);
-        ImGui::TableSetColumnIndex(2);
-        ImGui::TextUnformatted(type->name);
-        ImGui::TableSetColumnIndex(3);
-        ImGui::Text("%d", size);
-
-        return 0;
+        return tick_enum(tinfo);
     }
 
     case SymTagPointerType: {
-        lgdb_symbol_type_t *pointed_type = lgdb_get_type(shared_->ctx, type->uinfo.array_type.type_index);
-
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        bool opened = ImGui::TreeNodeEx(sym_name, ImGuiTreeNodeFlags_SpanFullWidth);
-
-        if (ImGui::BeginPopupContextItem(NULL)) {
-            if (ImGui::Selectable("Enter View Count")) {
-                popups_.push_back(new popup_view_count_t(var));
-
-                ImGui::CloseCurrentPopup();
-            }
-
-            if (ImGui::Selectable("Update (Debug)")) {
-                var->deep_sync(shared_->ctx, &variable_info_allocator_, &variable_copy_allocator_);
-
-                ImGui::CloseCurrentPopup();
-            }
-
-            ImGui::EndPopup();
-        }
-
-        if (!var->open && opened) {
-            var->open = 1;
-            var->requested = 1;
-            var->deep_sync(shared_->ctx, &variable_info_allocator_, &variable_copy_allocator_);
-        }
-
-        var->open = opened;
-        
-        ImGui::TableSetColumnIndex(1);
-        ImGui::Text("%p", *(void **)address);
-        ImGui::TableSetColumnIndex(2);
-
-        const char *pointed_type_name = pointed_type->name;
-        if (type->tag == SymTagBaseType) {
-            pointed_type_name = lgdb_get_base_type_string(pointed_type->uinfo.base_type.base_type);
-        }
-
-        ImGui::Text("%s*", pointed_type_name);
-        ImGui::TableSetColumnIndex(3);
-        ImGui::Text("%d", size);
-
-        if (opened) {
-            auto *sub = var->sub_start;
-            char name_buf[15] = {};
-
-            uint32_t i = 0;
-            variable_info_t *prev_open = var->first_sub_open;
-            for (auto *sub = var->sub_start; sub; sub = sub->next) {
-                lgdb_symbol_type_t *type = lgdb_get_type(shared_->ctx, sub->sym.type_index);
-                sprintf(name_buf, "[%d]", i);
-
-                bool was_open = sub->open;
-
-                bool opened_sub = render_symbol_type_data(
-                    sub,
-                    name_buf,
-                    type->name,
-                    sub->sym.debugger_bytes_ptr,
-                    type->size, type);
-
-                bool need_to_update_openness = !was_open && opened_sub;
-
-                if (opened_sub) {
-                    if (!was_open) {
-                        sub->open = 1;
-
-                        // The first element of the linked list hasn't been initialised
-                        if (!prev_open) {
-                            prev_open = var->first_sub_open = sub;
-                        }
-                        else {
-                            variable_info_t *next_open = prev_open->next_open;
-
-                            prev_open->next_open = sub;
-                            sub->next_open = next_open;
-                        }
-                    }
-
-                    prev_open = sub;
-                }
-                else {
-                    if (was_open) {
-                        sub->open = 0;
-
-                        if (var->first_sub_open == sub) {
-                            var->first_sub_open = NULL;
-                        }
-                        else {
-                            prev_open->next_open = sub->next_open;
-                            sub->open = NULL;
-                        }
-                    }
-                }
-
-                ++i;
-            }
-
-            ImGui::TreePop();
-        }
-
-        return opened;
+        return tick_pointer(tinfo);
     }
 
     default: return 0;
@@ -574,33 +464,42 @@ void variable_info_t::tick(
 }
 
 
-bool variable_info_t::tick_symbol_base_type_data(
-    const char *name,
-    const char *type_name
-    void *address,
-    uint32_t size,
-    lgdb_symbol_type_t *type) {
-    const char *type_name_actual = type_name;
-    if (!type_name)
-        type_name_actual = lgdb_get_base_type_string(type->uinfo.base_type.base_type);
+bool variable_info_t::tick_symbol_base_type_data(variable_tick_info_t *info) {
+    const char *type_name_actual = info->type_name;
+    if (!info->type_name)
+        type_name_actual = lgdb_get_base_type_string(info->type->uinfo.base_type.base_type);
 
     ImGui::TableNextRow();
     ImGui::TableSetColumnIndex(0);
 
-    uint32_t count = size / type->size;
+    uint32_t count = info->size / info->type->size;
 
     if (count == 1) {
-        ImGui::TreeNodeEx(
-            name,
-            ImGuiTreeNodeFlags_Leaf |
-            ImGuiTreeNodeFlags_Bullet |
-            ImGuiTreeNodeFlags_NoTreePushOnOpen |
-            ImGuiTreeNodeFlags_SpanFullWidth);
+        if (modified) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
+            ImGui::TreeNodeEx(
+                info->sym_name,
+                ImGuiTreeNodeFlags_Leaf |
+                ImGuiTreeNodeFlags_Bullet |
+                ImGuiTreeNodeFlags_NoTreePushOnOpen |
+                ImGuiTreeNodeFlags_SpanFullWidth);
+            ImGui::PopStyleColor();
+        }
+        else {
+            ImGui::TreeNodeEx(
+                info->sym_name,
+                ImGuiTreeNodeFlags_Leaf |
+                ImGuiTreeNodeFlags_Bullet |
+                ImGuiTreeNodeFlags_NoTreePushOnOpen |
+                ImGuiTreeNodeFlags_SpanFullWidth);
+        }
 
         ImGui::TableSetColumnIndex(1);
 
-        if (size / type->size == 1) {
-            switch (type->uinfo.base_type.base_type) {
+        if (info->size / info->type->size == 1) {
+            void *address = info->copy->get_address(info->address);
+
+            switch (info->type->uinfo.base_type.base_type) {
             case btChar: ImGui::Text("\'%c\'", *((char *)address)); break;
                 // case btWChar:
             case btInt: ImGui::Text("%d", *((int *)address)); break;
@@ -620,7 +519,7 @@ bool variable_info_t::tick_symbol_base_type_data(
         ImGui::Text(type_name_actual);
         ImGui::TableNextColumn();
         ImGui::TableSetColumnIndex(3);
-        ImGui::Text("%d", size);
+        ImGui::Text("%d", info->size);
     }
     else {
         assert(0);
@@ -631,13 +530,22 @@ bool variable_info_t::tick_symbol_base_type_data(
 }
 
 
-void variable_info_t::render_composed_var_row(
+bool variable_info_t::render_composed_var_row(
     const char *name,
     const char *type,
     uint32_t size) {
     ImGui::TableNextRow();
     ImGui::TableSetColumnIndex(0);
-    bool opened_struct = ImGui::TreeNodeEx(name, ImGuiTreeNodeFlags_SpanFullWidth);
+
+    bool opened_struct = 0;
+    if (modified) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
+        opened_struct = ImGui::TreeNodeEx(name, ImGuiTreeNodeFlags_SpanFullWidth);
+        ImGui::PopStyleColor();
+    }
+    else {
+        opened_struct = ImGui::TreeNodeEx(name, ImGuiTreeNodeFlags_SpanFullWidth);
+    }
 
     if (ImGui::BeginPopupContextItem(NULL)) {
         if (ImGui::Selectable("Something Cool")) {
@@ -658,4 +566,182 @@ void variable_info_t::render_composed_var_row(
     ImGui::Text("%d", size);
 
     return opened_struct;
+}
+
+
+bool variable_info_t::tick_pointer(variable_tick_info_t *tinfo) {
+    lgdb_symbol_type_t *pointed_type = lgdb_get_type(tinfo->ctx, tinfo->type->uinfo.pointer_type.type_index);
+
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    bool opened = 0;
+
+    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanFullWidth;
+
+    if (modified) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
+        opened = ImGui::TreeNodeEx(tinfo->sym_name, ImGuiTreeNodeFlags_SpanFullWidth);
+        ImGui::PopStyleColor();
+    }
+    else {
+        opened = ImGui::TreeNodeEx(tinfo->sym_name, ImGuiTreeNodeFlags_SpanFullWidth);
+    }
+
+    if (ImGui::BeginPopupContextItem(NULL)) {
+        if (ImGui::Selectable("Enter View Count")) {
+            tinfo->popups->push_back(new popup_view_count_t(this));
+
+            ImGui::CloseCurrentPopup();
+        }
+
+        if (ImGui::Selectable("Update (Debug)")) {
+            deep_sync(tinfo->ctx, tinfo->info_alloc, tinfo->copy, tinfo->modified_vars);
+
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    if (!open && opened) {
+        open = 1;
+        requested = 1;
+        deep_sync(tinfo->ctx, tinfo->info_alloc, tinfo->copy, tinfo->modified_vars);
+    }
+
+    open = opened;
+        
+    ImGui::TableSetColumnIndex(1);
+    ImGui::Text("%p", *(void **)(tinfo->copy->get_address(tinfo->address)));
+    ImGui::TableSetColumnIndex(2);
+
+    const char *pointed_type_name = pointed_type->name;
+    if (pointed_type->tag == SymTagBaseType) {
+        pointed_type_name = lgdb_get_base_type_string(pointed_type->uinfo.base_type.base_type);
+    }
+
+    ImGui::Text("%s*", pointed_type_name);
+    ImGui::TableSetColumnIndex(3);
+    ImGui::Text("%d", tinfo->size);
+
+    if (opened) {
+        auto *sub = sub_start;
+        char name_buf[15] = {};
+
+        uint32_t i = 0;
+        variable_info_t *prev_open = first_sub_open;
+        for (auto *sub = sub_start; sub; sub = sub->next) {
+            lgdb_symbol_type_t *type = lgdb_get_type(tinfo->ctx, sub->sym.type_index);
+            sprintf(name_buf, "[%d]", i);
+
+            bool was_open = sub->open;
+
+            variable_tick_info_t new_tinfo = *tinfo;
+            new_tinfo.address = sub->sym.dbg_offset;
+            new_tinfo.size = type->size;
+            new_tinfo.type = type;
+            new_tinfo.sym_name = name_buf;
+            new_tinfo.type_name = type->name;
+
+            bool opened_sub = sub->tick(&new_tinfo);
+
+            bool need_to_update_openness = !was_open && opened_sub;
+
+            if (opened_sub) {
+                if (!was_open) {
+                    sub->open = 1;
+
+                    // The first element of the linked list hasn't been initialised
+                    if (!prev_open) {
+                        prev_open = first_sub_open = sub;
+                    }
+                    else {
+                        variable_info_t *next_open = prev_open->next_open;
+
+                        prev_open->next_open = sub;
+                        sub->next_open = next_open;
+                    }
+                }
+
+                prev_open = sub;
+            }
+            else {
+                if (was_open) {
+                    sub->open = 0;
+
+                    if (first_sub_open == sub) {
+                        first_sub_open = NULL;
+                    }
+                    else {
+                        prev_open->next_open = sub->next_open;
+                        sub->open = NULL;
+                    }
+                }
+            }
+
+            ++i;
+        }
+
+        ImGui::TreePop();
+    }
+
+    return opened;
+}
+
+
+bool variable_info_t::tick_enum(variable_tick_info_t *tinfo) {
+    lgdb_symbol_type_t *enum_type = lgdb_get_type(tinfo->ctx, tinfo->type->uinfo.enum_type.type_index);
+
+    int32_t bytes;
+
+    void *address = tinfo->copy->get_address(tinfo->address);
+
+    switch (tinfo->size) {
+    case 1: bytes = *(int8_t *)address; break;
+    case 2: bytes = *(int16_t *)address; break;
+    case 4: bytes = *(int32_t *)address; break;
+    default: {
+        assert(0);
+    } break;
+    }
+
+    lgdb_entry_value_t *entry = lgdb_get_from_table(&tinfo->type->uinfo.enum_type.value_to_name, bytes);
+
+    char *enum_value_name = NULL;
+
+    if (entry) {
+        enum_value_name = (char *)*entry;
+    }
+    else {
+        enum_value_name = "__UNKNOWN_ENUM__";
+    }
+
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    if (modified) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
+        ImGui::TreeNodeEx(
+            tinfo->sym_name,
+            ImGuiTreeNodeFlags_Leaf |
+            ImGuiTreeNodeFlags_Bullet |
+            ImGuiTreeNodeFlags_NoTreePushOnOpen |
+            ImGuiTreeNodeFlags_SpanFullWidth);
+        ImGui::PopStyleColor();
+    }
+    else {
+        ImGui::TreeNodeEx(
+            tinfo->sym_name,
+            ImGuiTreeNodeFlags_Leaf |
+            ImGuiTreeNodeFlags_Bullet |
+            ImGuiTreeNodeFlags_NoTreePushOnOpen |
+            ImGuiTreeNodeFlags_SpanFullWidth);
+    }
+    ImGui::TableSetColumnIndex(1);
+    ImGui::Text("%s (%d)", enum_value_name, bytes);
+    ImGui::TableSetColumnIndex(2);
+    ImGui::TextUnformatted(tinfo->type->name);
+    ImGui::TableSetColumnIndex(3);
+    ImGui::Text("%d", tinfo->size);
+
+    return 0;
 }

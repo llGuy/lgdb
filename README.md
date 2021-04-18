@@ -1,6 +1,6 @@
 # lGdb
 
-A Windows C/C++ Debugger project which contains 3 things:
+A 64-bit Windows C/C++ Debugger project which contains 3 things:
 
 - An easy to use API for interfacing with Windows debugging utilities (code in `source/lgdb`)
 - Debugger through a command line interface (code in `source/lgdbcli`)

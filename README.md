@@ -1,5 +1,7 @@
 # lGdb
 
+![Screenshot](/resources/LGDB.PNG?raw=true "Screenshot")
+
 A 64-bit Windows C/C++ Debugger project which contains 3 things:
 
 - An easy to use API for interfacing with Windows debugging utilities (code in `source/lgdb`)
